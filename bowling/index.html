@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bowling</title>
+  <link rel="stylesheet" href="css/ecran.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icones/icone-192.png">
+  <meta name="theme-color" content="#1a1d27">
+  <script type="importmap">{ "imports": { "three": "./lib/three/three.module.js" } }</script>
+</head>
+<body>
+  <canvas id="vue"></canvas>
+  <div id="hud"></div>
+  <div id="scoreboard" class="scoreboard cache"></div>
+  <div id="salon" class="salon cache"></div>
+  <div id="fin" class="fin cache"></div>
+  <div id="titre" class="titre cache"></div>
+  <div id="profils" class="profils cache"></div>
+  <div id="sans-webgl" class="sans-webgl cache">
+    <h2>Affichage 3D indisponible</h2>
+    <p id="sans-webgl-detail"></p>
+    <p>Le navigateur n’a pas pu créer de contexte WebGL. Vérifie l’accélération matérielle dans les réglages du navigateur (Edge/Chrome : Paramètres → Système → « Utiliser l’accélération graphique »). Le banc de calibrage (C) et la salle restent utilisables.</p>
+  </div>
+
+  <header class="haut">
+    <h1>Bowling <small id="version"></small></h1>
+    <span id="badge-signalisation" class="etiquette">Signalisation : …</span>
+    <span id="badge-manettes" class="etiquette">0 manette</span>
+    <span class="espace"></span>
+    <button id="btn-menu" class="secondaire" type="button">Menu (M)</button>
+    <button id="btn-banc" class="secondaire" type="button">Banc (C)</button>
+    <button id="btn-reglages" class="secondaire" type="button">Réglages (Échap)</button>
+    <button id="btn-plein-ecran" class="secondaire" type="button">Plein écran (F)</button>
+  </header>
+
+  <aside id="banc" class="banc cache">
+    <div class="banc-grille">
+      <section class="colonne-gauche">
+        <div class="panneau">
+          <h2>Rejoindre</h2>
+          <div id="code" class="code">·····</div>
+          <div id="qr" class="qr"></div>
+          <p id="qr-aide" class="aide lien-aide"></p>
+          <label class="champ-texte">Adresse en ligne de manette.html
+            <input id="adresse-manette" type="text" placeholder="https://identifiant.github.io/jeux/bowling/manette.html" spellcheck="false">
+          </label>
+          <div class="actions">
+            <button id="btn-copier" class="secondaire" type="button">Copier le lien</button>
+            <button id="btn-nouveau-code" class="secondaire" type="button">Nouveau code</button>
+          </div>
+        </div>
+        <div class="panneau">
+          <h2>Manettes</h2>
+          <div id="cartes"></div>
+          <p id="cartes-vide" class="aide">Aucune manette connectée. Sur l’iPhone : appareil photo → QR code → Safari, ou ouvrir l’adresse ci-dessus et saisir le code.</p>
+        </div>
+        <div class="panneau">
+          <h2>Événements</h2>
+          <div id="notes" class="notes"></div>
+        </div>
+      </section>
+
+      <section class="colonne-centre">
+        <div class="panneau">
+          <h2>Capteurs en direct — <span id="graph-joueur">aucune manette</span> <span class="aide">(clique sur une carte pour changer)</span></h2>
+          <div class="graphique">
+            <div class="titre-graph">Accélération sans gravité (m/s²)</div>
+            <canvas id="graph-accel"></canvas>
+          </div>
+          <div class="graphique">
+            <div class="titre-graph">Vitesse angulaire (°/s)</div>
+            <canvas id="graph-rot"></canvas>
+          </div>
+          <div class="graphique">
+            <div class="titre-graph">Pendant le geste — vitesse estimée (m/s), verticale, avant (si sens calibré), torsion (°/10)</div>
+            <canvas id="graph-vit"></canvas>
+          </div>
+          <p class="aide">Repères : <span class="rep-pose">vert</span> = pouce posé · <span class="rep-leve">rouge</span> = pouce levé · <span class="rep-instant">orange</span> = instant du lancer retenu.</p>
+        </div>
+        <div class="panneau">
+          <h2>Dernier lancer</h2>
+          <div id="dernier" class="dernier">—</div>
+        </div>
+        <div class="panneau">
+          <h2>Journal des lancers</h2>
+          <div class="actions">
+            <button id="btn-csv" class="secondaire" type="button">Exporter en CSV</button>
+            <button id="btn-vider" class="secondaire" type="button">Vider</button>
+          </div>
+          <div class="tableau">
+            <table id="journal">
+              <thead>
+                <tr>
+                  <th>Heure</th><th>Joueur</th><th>Mode</th><th>Résultat</th><th>Puiss.</th><th>Effet</th><th>Phase</th>
+                  <th title="Pic d’accélération (m/s²)">Pic</th><th title="Vitesse estimée (m/s)">Vit.</th><th title="Vitesse verticale (m/s)">V.vert</th>
+                  <th title="Vitesse vers l’avant (m/s)">Avant</th><th title="Torsion (°)">Tors.</th><th title="Durée du maintien (ms)">Durée</th><th title="Latence (ms)">Lat.</th><th title="Quilles tombées">Quilles</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <aside id="tiroir" class="tiroir cache">
+    <div class="tiroir-entete">
+      <h2>Réglages</h2>
+      <button id="btn-fermer-reglages" class="secondaire" type="button">Fermer</button>
+    </div>
+    <div id="reglages-contenu" class="tiroir-contenu"></div>
+    <div class="tiroir-pied">
+      <button id="btn-exporter" class="secondaire" type="button">Exporter (JSON)</button>
+      <label class="bouton secondaire">Importer (JSON)<input id="fichier-import" type="file" accept="application/json,.json" hidden></label>
+      <button id="btn-reinit" class="danger" type="button">Tout réinitialiser</button>
+    </div>
+  </aside>
+
+  <script src="lib/peerjs.min.js"></script>
+  <script type="module" src="js/ecran/main.js"></script>
+</body>
+</html>

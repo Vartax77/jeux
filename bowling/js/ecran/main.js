@@ -1,0 +1,907 @@
+// Écran (PC) — lot 3 : salon, partie à tours (téléphones, téléphone partagé, clavier, bots), score, sauvegarde.
+// Ouvre la salle, accueille les manettes, détecte les lancers (lot 1), fait tourner le jeu 3D (lot 2),
+// et orchestre la partie : tours, feuille de score, scoreboard, fin de partie, reprise après rafraîchissement.
+
+import { COULEURS, couleurHex, VERSION, DELAI_OUBLI_PLACE_MIN } from '../commun/constantes.js';
+import { TYPES } from '../commun/protocole.js';
+import { vec } from '../commun/maths.js';
+import { Salle, nouveauCode, codeValide } from './salle.js';
+import { Reglages, rendrePanneau } from './reglages.js';
+import { Profils } from './profils.js';
+import { preparerEchantillon, nouveauGeste, ajouterAuGeste, terminerGeste, resultatGlisser } from './geste.js';
+import { Banc, telecharger } from './banc.js';
+import { MondePhysique, DIM } from './jeu/physique.js';
+import { Partie } from './jeu/partie.js';
+import { Hud } from './jeu/hud.js';
+import { Clavier } from './jeu/clavier.js';
+import { Match } from './jeu/match.js';
+import { Bot } from './jeu/bot.js';
+import { Scoreboard } from './jeu/scoreboard.js';
+import { callout as calloutScore } from './jeu/score.js';
+import { sauverPartie, chargerPartie, effacerPartie, resumerSauvegarde } from './jeu/sauvegarde.js';
+import { Salon } from './salon.js';
+import { Fin } from './fin.js';
+import { AudioJeu } from './jeu/audio.js';
+import { Entrainement, MODES, enregistrerScore, meilleursScores } from './jeu/entrainement.js';
+import { configurerDimensions } from './jeu/physique.js';
+import { Titre } from './titre.js';
+import { ProfilsUI, niveau, estPro } from './profils-ui.js';
+import { statistiques } from './jeu/score.js';
+import qrcode from '../../lib/qrcode-generator.js';
+
+const $ = (id) => document.getElementById(id);
+const reglages = new Reglages();
+const lire = (id) => reglages.get(id);
+const profils = new Profils();
+const suivis = new Map();   // jeton → suivi (historique, geste, marqueurs…)
+let adresseManette = localStorage.getItem('bowling.adresseManette') || adresseParDefaut();
+
+// ---------- Utilitaires ----------
+
+function adresseParDefaut() {
+  const u = new URL(location.href);
+  if (u.protocol === 'file:' || ['localhost', '127.0.0.1', '::1', '[::1]'].includes(u.hostname)) return '';
+  return u.origin + u.pathname.replace(/[^/]*$/, '') + 'manette.html';
+}
+
+function nouveauSuivi() {
+  return { historique: [], marqueurs: [], geste: null, timerFin: null, glisser: null, dernierEch: null, dernierResultat: null, calibration: null };
+}
+
+function reglagesEffectifs(j) {
+  const p = profils.get(j.jeton);
+  const eff = { ...reglages.valeurs };
+  if (p && p.reglages) for (const [k, v] of Object.entries(p.reglages)) if (v != null && v !== '') eff[k] = v;
+  if (!(p && p.reglages && p.reglages.main)) eff.main = j.main;
+  return eff;
+}
+
+function configPour(j) {
+  const eff = reglagesEffectifs(j);
+  return { modeLancer: eff.modeLancer, freqArme: eff.freqArme, freqRepos: eff.freqRepos };
+}
+
+// Phase vue par une manette donnée.
+function phaseManettePour(jm) {
+  if (entrainement) return entrainement.termine ? 'fin' : (partie.peutLancer() ? 'preparation' : 'cinematique');
+  if (match.etat === 'salon') return 'salon';
+  if (match.etat === 'termine' || partie.verrouille) return 'fin';
+  if (!partie.peutLancer()) return 'cinematique';
+  return manetteDuJoueurCourant(jm) ? 'preparation' : 'attente';
+}
+
+// La manette jm est-elle celle du joueur courant (téléphone ou téléphone partagé) ?
+function manetteDuJoueurCourant(jm) {
+  const jc = match.joueurCourant();
+  return !!(jc && (jc.type === 'telephone' || jc.type === 'partage') && jc.jeton === jm.jeton);
+}
+
+function etatPour(jm, message = '') {
+  const phase = phaseManettePour(jm);
+  const jc = match.joueurCourant();
+  const passe = phase === 'preparation' && attentePassage ? jc.nom : '';
+  let texte = message;
+  if (!texte && entrainement) texte = phase === 'preparation' ? entrainement.titre + ' · lancer ' + entrainement.etat().lancer + '/10' : '';
+  else if (!texte) {
+    if (phase === 'preparation') texte = passe ? '' : (jc && jc.type === 'partage' ? jc.nom + ' : ' : '') + 'À toi !';
+    else if (phase === 'attente' && jc) texte = 'Au tour de ' + jc.nom;
+    else texte = '';
+  }
+  return {
+    tonTour: phase === 'preparation' && !!jm.actif && !attentePassage, phase, joueur: jc ? jc.nom : (entrainement ? entrainement.titre : ''), passe,
+    premier: match.etat === 'salon' && salle.liste[0] === jm,
+    position: partie.visee.position, angle: partie.visee.angle, latence: jm.latence == null ? null : Math.round(jm.latence), message: texte,
+  };
+}
+
+function envoyerEtat(j, message = '') { salle.envoyer(j, { type: TYPES.ETAT, ...etatPour(j, message) }); }
+function envoyerConfig(j) { salle.envoyer(j, { type: TYPES.CONFIG, ...configPour(j) }); }
+function envoyerEtatATous(message = '') { for (const j of salle.liste) if (j.connecte) envoyerEtat(j, message); }
+
+// ---------- Jeu : physique, cycle, HUD, clavier ----------
+
+// Mode : partie (défaut) ou entraînement (index.html?mode=spares|puissance|effet)
+const MODE = (() => { const m = new URL(location.href).searchParams.get('mode'); return m && MODES[m] ? m : 'partie'; })();
+if (MODE === 'puissance') configurerDimensions({ longueurDeck: 3.6, largeurDeckExtra: 2.1 });
+const RANGS = MODE === 'puissance' ? 13 : 4;
+const phys = new MondePhysique(lire, { rangs: RANGS });
+const partie = new Partie(phys, lire);
+let entrainement = null;
+const hud = new Hud($('hud'), lire);
+const clavier = new Clavier(partie);
+const bot = new Bot(partie, lire);
+const scoreboard = new Scoreboard($('scoreboard'));
+let match = new Match({ nbFrames: Number(lire('nbFrames')) || 10, gouttieresFermees: !!lire('gouttieresFermees') });
+let dernierResultatMatch = null;   // résultat du match pour le dernier lancer
+let attentePassage = false;         // téléphone partagé : « Passe le téléphone à … » affiché, lancer bloqué
+let timerPassage = null;
+let tourClavier = false;            // K : le clavier joue ce tour à la place d'une manette déconnectée
+const dernierLanceurParJeton = new Map();
+partie.verrouille = true;           // aucun lancer tant que la partie n'a pas commencé (salon)
+
+// Rendu 3D : facultatif (sans WebGL, le banc et la salle fonctionnent quand même).
+let scene = null, cameras = null, renderer = null, personnage = null, spectateurs = null;
+const audio = new AudioJeu(lire);
+const debloquerAudio = () => { if (audio.debloquer()) audio.majMusique(); };
+window.addEventListener('pointerdown', debloquerAudio);
+window.addEventListener('keydown', debloquerAudio);
+const positionMain = { valeur: null };
+let tempsGlobal = 0;
+async function demarrerRendu() {
+  try {
+    const [{ creerRenderer, Scene3D }, { Cameras }] = await Promise.all([import('./jeu/scene.js'), import('./jeu/cameras.js')]);
+    renderer = creerRenderer($('vue'));
+    scene = new Scene3D(renderer, lire, { rangs: RANGS });
+    cameras = new Cameras(scene.camera, renderer.domElement, lire);
+    const { Personnage, Spectateurs } = await import('./jeu/personnage.js');
+    personnage = new Personnage();
+    scene.scene.add(personnage.groupe);
+    spectateurs = new Spectateurs(36);
+    spectateurs.groupe.visible = lire('spectateurs') !== false;
+    scene.scene.add(spectateurs.groupe);
+    redimensionner();
+    cameras.definir(MODE === 'partie' ? 'titre' : 'preparation', contexteCamera(), true);
+  } catch (e) {
+    scene = null; cameras = null; renderer = null;
+    $('sans-webgl').classList.remove('cache');
+    $('sans-webgl-detail').textContent = String(e && e.message ? e.message : e);
+    console.error('Rendu 3D indisponible :', e);
+  }
+}
+
+function redimensionner() {
+  if (scene) scene.redimensionner(window.innerWidth, window.innerHeight);
+}
+window.addEventListener('resize', redimensionner);
+
+function contexteCamera() {
+  const b = phys.boule.corps.position;
+  return { visee: partie.visee, boule: { x: b.x, y: b.y, z: b.z }, cote: partie.coteImpact };
+}
+
+const PLAN_PAR_PHASE = { preparation: 'preparation', roulement: 'roulement', impact: 'impact', resultat: 'resultat', remise: 'remise' };
+
+partie.addEventListener('phase', (e) => {
+  const { phase, boule, frame } = e.detail;
+  const jc = match.joueurCourant();
+  // Hors préparation, le HUD garde le nom du lanceur (le match a déjà pu passer au joueur suivant).
+  const nom = phase === 'preparation' ? (jc ? jc.nom : '') : (partie.lance ? partie.lance.nom : (jc ? jc.nom : ''));
+  hud.majEtat({ phase, boule, frame, debout: partie.debout, joueur: nom });
+  if (cameras) cameras.definir(PLAN_PAR_PHASE[phase] || 'preparation', contexteCamera(), phase === 'impact');
+  if (phase !== 'preparation') { hud.majTour({}); envoyerEtatATous(); }
+});
+partie.addEventListener('lancer', (e) => {
+  const l = e.detail.lance;
+  if (personnage) personnage.lancer();
+  hud.majEtat({ lanceur: l.nom });
+  hud.message((l.phase === 'lob' ? 'Boule lobée · ' : l.phase === 'arriere' ? 'Boule en arrière · ' : '') + 'puissance ' + Math.round(l.puissance * 100) + ' % · effet ' + l.effet.toFixed(2).replace('.', ','), 2);
+});
+
+// Le match décide de la suite de chaque lancer (respot / rack, boule, frame, joueur) — appelé avant l'événement 'resultat'.
+partie.suivant = (res) => {
+  if (entrainement) return entrainement.suivant(res);
+  if (match.etat !== 'enCours') return null;
+  const r = match.enregistrerResultat(res.tombees);
+  dernierResultatMatch = r;
+  return { mode: r.modeRemise, boule: r.fin ? 1 : r.suivant.boule, frame: r.fin ? r.frame : r.suivant.frame, fin: r.fin };
+};
+
+partie.addEventListener('resultat', (e) => {
+  const r = e.detail;
+  const rm = dernierResultatMatch;
+  let c;
+  if (entrainement) {
+    const dernier = entrainement.resultats[entrainement.resultats.length - 1];
+    c = entrainement.mode === 'spares' ? (dernier && dernier.reussi ? { texte: 'SPARE !', classe: 'spare' } : { texte: r.tombees ? r.tombees + (r.tombees > 1 ? ' QUILLES' : ' QUILLE') : 'RATÉ', classe: r.tombees ? '' : 'zero' })
+      : (r.debout === 0 && r.tombees >= 10 ? { texte: r.tombees + ' QUILLES — TOUT !', classe: 'strike' } : hud.texteResultat(r));
+    hud.majEntrainement(entrainement.etat());
+  } else if (rm && rm.joueur) c = calloutScore(rm.joueur.feuille, { quilles: r.tombees, strike: rm.strike, spare: rm.spare, tombees: r.quilles, gouttiere: r.gouttiere, phaseLancer: r.phaseLancer, boule: rm.boule });
+  else c = hud.texteResultat(r);
+  if (lire('calloutsActifs') !== false) hud.annoncer(c.texte, c.classe, Math.max(1.5, lire('dureeResultat') || 2.5));
+  hud.majEtat({ debout: r.debout });
+  reagir(c, r);
+  banc.noter((r.nom || 'Clavier') + ' : ' + r.tombees + ' quille' + (r.tombees > 1 ? 's' : '') + ' — ' + c.texte.toLowerCase());
+  const jc = rm ? rm.joueur : null;
+  if (jc && jc.jeton) banc.completerQuilles(jc.jeton, r.tombees);
+  if (rm) {
+    scoreboard.rendre(match);
+    if (rm.fin) effacerPartie();
+    else sauverPartie({ match: match.versJSON(), mode: rm.modeRemise, quillesDebout: rm.modeRemise === 'respot' ? r.quilles.map((t, i) => (t ? null : i + 1)).filter(Boolean) : null });
+  }
+  dernierResultatMatch = null;
+});
+partie.addEventListener('remise', () => { audio.jouer('pinsetter'); });
+
+// Réactions du personnage, des spectateurs et de la foule selon le résultat.
+function reagir(c, r) {
+  const grand = c.classe === 'strike' || c.classe === 'turkey' || c.classe === 'parfaite';
+  if (grand) { hud.confettis(c.classe === 'parfaite' ? 220 : c.classe === 'turkey' ? 130 : 80); }
+  if (personnage) personnage.reagir(grand || c.classe === 'spare' ? 'joie' : (c.classe === 'gouttiere' || c.classe === 'zero' || c.classe === 'gag') ? 'deception' : 'hausse');
+  if (spectateurs) spectateurs.reagir(c.classe === 'parfaite' || c.classe === 'turkey' ? 'ovation' : grand || c.classe === 'spare' ? 'acclamation' : c.classe === 'gag' ? 'rire' : (c.classe === 'gouttiere' || c.classe === 'zero') ? 'oh' : 'acclamation');
+  if (!audio.ctx) return;
+  if (c.classe === 'parfaite') { audio.jouer('jingle-parfait'); audio.jouer('foule-ovation'); }
+  else if (c.classe === 'turkey') { audio.jouer('jingle-turkey'); audio.jouer('foule-ovation'); }
+  else if (c.classe === 'strike') { audio.jouer('jingle-strike'); audio.jouer('foule-ovation'); }
+  else if (c.classe === 'spare') { audio.jouer('jingle-spare'); audio.jouer('foule-acclamation'); }
+  else if (c.classe === 'gag') { audio.jouer('foule-rire'); }
+  else if (c.classe === 'gouttiere' || c.classe === 'zero') { audio.jouer('foule-oh'); }
+  else if (c.classe === 'split') { audio.jouer('foule-oh'); }
+  else audio.jouer('foule-acclamation', { gain: 0.3 + 0.07 * (r.tombees || 0) });
+}
+
+partie.addEventListener('preparation', (e) => {
+  const jc = match.joueurCourant();
+  hud.majEtat({ phase: 'preparation', boule: e.detail.boule, frame: e.detail.frame, debout: e.detail.debout, lanceur: '', joueur: jc ? jc.nom : (entrainement ? entrainement.titre : '') });
+  if (entrainement) {
+    if (entrainement.termine) terminerEntrainement();
+    else { if (scene) scene.majBarriere(phys.barriere ? phys.barriere.config : null); hud.majEntrainement(entrainement.etat()); envoyerEtatATous(); }
+    return;
+  }
+  if (match.etat === 'termine') { terminerPartie(); return; }
+  if (match.etat === 'enCours') demarrerTour();
+});
+
+// ---------- Entraînement ----------
+
+function demarrerEntrainement() {
+  entrainement = new Entrainement(MODE, phys, lire);
+  titre.afficher(false);
+  salon.afficher(false);
+  scoreboard.afficher(false);
+  partie.verrouille = false;
+  partie.reinitialiser();
+  entrainement.preparer();
+  partie.debout = phys.etatQuilles().nbDebout;
+  hud.majEtat({ debout: partie.debout, joueur: entrainement.titre, boule: 1, frame: 1 });
+  if (scene) scene.majBarriere(phys.barriere ? phys.barriere.config : null);
+  hud.majEntrainement(entrainement.etat());
+  hud.majTour({ titre: entrainement.titre, sous: MODES[MODE].description });
+  setTimeout(() => hud.majTour({}), 4000);
+  envoyerEtatATous();
+  banc.noter('Entraînement : ' + entrainement.titre);
+}
+
+function terminerEntrainement() {
+  partie.verrouille = true;
+  const e = entrainement.etat();
+  const nom = salle.liste[0] ? salle.liste[0].nom : 'Clavier';
+  const record = enregistrerScore(MODE, e.score, nom);
+  hud.majEntrainement(e);
+  fin.afficherEntrainement(e, record, { recommencer: () => location.reload(), menu: () => { location.href = 'index.html'; } });
+  envoyerEtatATous();
+}
+partie.addEventListener('visee', () => {
+  hud.majVisee(partie.visee);
+  envoyerEtatATous();
+});
+
+// ---------- Tours ----------
+
+// Qui a le droit de lancer maintenant ? source : 'clavier' | 'telephone' (avec jeton) | 'bot'
+function lancerAutorise(source, jeton = null) {
+  if (entrainement) return !entrainement.termine && partie.peutLancer() && source !== 'bot';
+  const jc = match.joueurCourant();
+  if (!jc || !partie.peutLancer()) return false;
+  if (source === 'bot') return jc.type === 'bot';
+  if (source === 'clavier') return jc.type === 'clavier' || tourClavier || !!lire('clavierPourTous');
+  if (source === 'telephone') return (jc.type === 'telephone' || jc.type === 'partage') && jc.jeton === jeton && !attentePassage && !tourClavier;
+  return false;
+}
+
+function demarrerTour() {
+  const jc = match.joueurCourant();
+  if (!jc) return;
+  clearTimeout(timerPassage);
+  attentePassage = false;
+  tourClavier = false;
+  bot.arreter();
+  if (scene) scene.couleurBoule(couleurHex(jc.couleur), joueurPro(jc));
+  if (personnage) personnage.appliquerProfil(profilPersonnage(jc));
+  scoreboard.rendre(match);
+  const pos = match.position();
+  hud.majEtat({ phase: 'preparation', boule: pos ? pos.boule : 1, frame: pos ? pos.frame : 1, debout: partie.debout, joueur: jc.nom });
+  if (jc.type === 'bot') {
+    bot.demarrer(jc, partie.debout === 10 ? null : phys.etatQuilles().tombees);
+    hud.majTour({ titre: jc.nom + ' joue…', sous: 'Espace ou un toucher : passer', classe: 'bot' });
+  } else if (jc.type === 'telephone' || jc.type === 'partage') {
+    const manette = salle.joueurs.get(jc.jeton);
+    const partage = match.joueursParJeton(jc.jeton).length > 1;
+    if (partage && manette && manette.connecte && dernierLanceurParJeton.get(jc.jeton) !== jc.id && (lire('delaiPassage') || 0) > 0) {
+      attentePassage = true;
+      majBanniereTour();
+      timerPassage = setTimeout(() => { attentePassage = false; if (match.joueurCourant() === jc && partie.peutLancer()) { majBanniereTour(); envoyerEtatATous(); } }, (lire('delaiPassage') || 0) * 1000);
+    } else {
+      majBanniereTour();
+    }
+  } else {
+    hud.majTour({ titre: 'À toi, ' + jc.nom, sous: 'Au clavier : ← → Q D pour viser, Espace pour lancer' });
+  }
+  envoyerEtatATous();
+}
+
+// Joueur « Pro » (expérience) → boule spéciale.
+function joueurPro(j) {
+  const p = (j.jeton && profils.get(j.jeton)) || profils.parNom(j.nom);
+  return !!(p && p.stats && estPro(p.stats.xp));
+}
+
+// Apparence du personnage d'un joueur (couleur du joueur ; coiffure, teint et visage depuis le profil écran, lot 5).
+function profilPersonnage(j) {
+  const p = (j.jeton && profils.get(j.jeton)) || profils.parNom(j.nom) || null;
+  return { nom: j.nom, couleur: couleurHex(j.couleur), main: j.main, coiffure: (p && p.coiffure) || (j.type === 'bot' ? 'casquette' : 'court'), teint: (p && p.teint) || 'medium', textureVisage: p && p.photo ? textureDepuisImage(p.photo) : null };
+}
+const cacheTextures = new Map();
+function textureDepuisImage(dataUrl) {
+  if (!scene || !dataUrl) return null;
+  if (cacheTextures.has(dataUrl)) return cacheTextures.get(dataUrl);
+  const t = scene.textureImage(dataUrl);
+  cacheTextures.set(dataUrl, t);
+  return t;
+}
+
+// Bandeau du tour d'un joueur téléphone (connecté ou non).
+function majBanniereTour() {
+  const jc = match.joueurCourant();
+  if (!jc || !partie.peutLancer()) return;
+  if (jc.type !== 'telephone' && jc.type !== 'partage') return;
+  const manette = salle.joueurs.get(jc.jeton);
+  if (tourClavier) hud.majTour({ titre: 'Tour de ' + jc.nom + ' au clavier', sous: 'K : rendre la main au téléphone' });
+  else if (!manette || !manette.connecte) hud.majTour({ titre: 'Manette de ' + jc.nom + ' déconnectée', sous: 'Reprise automatique à la reconnexion · K : jouer ce tour au clavier', classe: 'alerte' });
+  else if (attentePassage) hud.majTour({ titre: 'Passe le téléphone à ' + jc.nom, sous: 'téléphone de ' + manette.nom, classe: 'passage' });
+  else hud.majTour({ titre: 'À toi, ' + jc.nom, sous: match.joueursParJeton(jc.jeton).length > 1 ? 'téléphone de ' + manette.nom : '' });
+}
+
+// Au départ, chaque téléphone est dans la main de son propriétaire (le joueur « téléphone » de ce jeton).
+function initialiserPorteurs() {
+  dernierLanceurParJeton.clear();
+  for (const j of match.joueurs) if (j.type === 'telephone') dernierLanceurParJeton.set(j.jeton, j.id);
+}
+
+function demarrerPartie() {
+  if (!match.commencer()) { hud.message('Ajoute au moins un joueur', 2); return; }
+  initialiserPorteurs();
+  effacerPartie();
+  phys.reglerBumpers(!!lire('gouttieresFermees'));
+  partie.verrouille = false;
+  salon.afficher(false);
+  fin.cacher();
+  scoreboard.afficher(true);
+  partie.reinitialiser();
+  demarrerTour();
+  banc.noter('Partie commencée : ' + match.joueurs.map((j) => j.nom).join(', '));
+}
+
+function reprendrePartie() {
+  const sauv = chargerPartie();
+  if (!sauv) { hud.message('Aucune partie sauvegardée', 2); return; }
+  lierMatch(Match.depuisJSON(sauv.match));
+  initialiserPorteurs();
+  for (const j of match.joueurs) if (j.type === 'telephone' || j.type === 'partage') j.connecte = !!(salle.joueurs.get(j.jeton) && salle.joueurs.get(j.jeton).connecte);
+  const pos = match.position();
+  partie.verrouille = false;
+  salon.afficher(false);
+  fin.cacher();
+  scoreboard.afficher(true);
+  partie.reprendre({ quillesDebout: sauv.mode === 'respot' ? sauv.quillesDebout : null, boule: pos ? pos.boule : 1, frame: pos ? pos.frame : 1 });
+  demarrerTour();
+  banc.noter('Partie reprise : ' + resumerSauvegarde(sauv));
+}
+
+function terminerPartie() {
+  partie.verrouille = true;
+  bot.arreter();
+  hud.majTour({});
+  scoreboard.rendre(match);
+  const cl = match.classement();
+  const gains = {};
+  for (const e of cl) {
+    const j = e.joueur;
+    if (j.type === 'bot') continue;
+    const cle = j.type === 'telephone' && j.jeton ? j.jeton : ('nom:' + j.nom.trim().toLowerCase());
+    if (!profils.get(cle)) profils.assurerParNom(j.nom);
+    const avant = (profils.get(cle) && profils.get(cle).stats && profils.get(cle).stats.xp) || 0;
+    const st = profils.enregistrerPartie(cle, { total: e.total, strikes: e.stats.strikes, spares: e.stats.spares, meilleur: e.stats.meilleur });
+    if (st) gains[j.id] = { xp: st.xp - avant, niveau: niveau(st.xp) };
+  }
+  fin.afficher(cl, match.options.nbFrames, gains);
+  banc.noter('Partie terminée : ' + cl.map((e) => e.joueur.nom + ' ' + e.total).join(', '));
+  envoyerEtatATous();
+}
+
+function rejouer() {
+  fin.cacher();
+  demarrerPartie();
+}
+
+function retourSalon() {
+  bot.arreter();
+  partie.verrouille = true;
+  fin.cacher();
+  titre.afficher(false);
+  if (cameras) cameras.definir('preparation', contexteCamera(), true);
+  scoreboard.afficher(false);
+  hud.majTour({});
+  const options = { nbFrames: Number(lire('nbFrames')) || 10, gouttieresFermees: !!lire('gouttieresFermees') };
+  const precedent = match;
+  lierMatch(new Match(options));
+  // Les joueurs précédents (hors partagés déconnectés) reviennent dans le salon, dans le même ordre
+  for (const j of precedent.joueurs) {
+    if ((j.type === 'telephone' || j.type === 'partage') && !salle.joueurs.get(j.jeton)) continue;
+    match.ajouterJoueur({ nom: j.nom, couleur: j.couleur, type: j.type, jeton: j.jeton, niveau: j.niveau, main: j.main });
+  }
+  for (const jm of salle.liste) assurerJoueurTelephone(jm);
+  partie.reinitialiser();
+  salon.afficher(true);
+  envoyerEtatATous();
+}
+
+function lierMatch(nouveau) {
+  match = nouveau;
+  match.addEventListener('joueurs', () => { if (match.etat === 'salon') envoyerEtatATous(); });
+}
+lierMatch(match);
+
+// Dans le salon, chaque téléphone connecté est un joueur.
+function assurerJoueurTelephone(jm) {
+  if (match.etat !== 'salon') return;
+  const existant = match.joueurs.find((j) => j.type === 'telephone' && j.jeton === jm.jeton);
+  if (existant) { match.modifierJoueur(existant.id, { nom: jm.nom, couleur: jm.couleur, main: jm.main, connecte: true }); return; }
+  match.ajouterJoueur({ nom: jm.nom, couleur: jm.couleur, type: 'telephone', jeton: jm.jeton, main: jm.main });
+}
+
+// ---------- Entrées : clavier, bot ----------
+
+clavier.addEventListener('lancer', (e) => {
+  const d = e.detail;
+  if (!partie.peutLancer()) { if (match.etat === 'salon') hud.message('Commence une partie dans le salon', 2.5); return; }
+  if (!lancerAutorise('clavier')) { hud.message('Ce n’est pas au clavier de jouer (K : prendre ce tour)', 2.5); return; }
+  const jc = match.joueurCourant();
+  if (entrainement && scene) scene.couleurBoule(couleurHex(COULEURS[0]));
+  if (jc && jc.jeton) dernierLanceurParJeton.set(jc.jeton, jc.id);
+  partie.lancer({ puissance: d.puissance, effet: d.effet, phase: d.phase, joueur: jc ? jc.id : 'clavier', nom: jc ? jc.nom : 'Clavier' });
+});
+clavier.addEventListener('passer', () => passer());
+clavier.addEventListener('jauge', () => { if (personnage) personnage.armer(true); audio.jouer('clic'); });
+clavier.addEventListener('gag', () => hud.majGag(clavier.gag));
+
+function passer() {
+  if (bot.actif) { if (bot.passer()) hud.message('Passé', 0.8); return true; }
+  if (partie.passer()) { hud.message('Passé', 0.8); return true; }
+  return false;
+}
+
+bot.addEventListener('lancer', (e) => {
+  if (!lancerAutorise('bot')) return;
+  const jc = match.joueurCourant();
+  partie.lancer({ ...e.detail, joueur: jc.id, nom: jc.nom });
+});
+
+function basculerTourClavier() {
+  const jc = match.joueurCourant();
+  if (!jc || (jc.type !== 'telephone' && jc.type !== 'partage') || !partie.peutLancer()) { hud.message('K : seulement pendant le tour d’un joueur téléphone', 2); return; }
+  tourClavier = !tourClavier;
+  attentePassage = false;
+  clearTimeout(timerPassage);
+  majBanniereTour();
+  envoyerEtatATous();
+}
+
+// Raccourcis d'interface (hors jeu) : Échap réglages, C banc, V caméra libre, F plein écran, H aide, J rejoindre
+window.addEventListener('keydown', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) { if (e.key === 'Escape') { t.blur(); } return; }
+  switch (e.key) {
+    case 'Escape': basculerTiroir(); break;
+    case 'c': case 'C': banc.basculer(); break;
+    case 'v': case 'V': if (cameras) hud.message(cameras.basculerLibre() ? 'Caméra libre : souris pour tourner, molette pour zoomer, V pour revenir' : 'Caméra du jeu', 2.5); break;
+    case 'f': case 'F': basculerPleinEcran(); break;
+    case 'h': case 'H': hud.basculerAide(); break;
+    case 'j': case 'J': hud.basculerRejoindre(); break;
+    case 'k': case 'K': basculerTourClavier(); break;
+    case 'm': case 'M': if (entrainement) location.href = 'index.html'; else if (titre.visible) titre.afficher(false); else allerAuTitre(); break;
+    default: break;
+  }
+});
+
+function basculerPleinEcran() {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else document.documentElement.requestFullscreen().catch(() => hud.message('Plein écran refusé par le navigateur', 2));
+}
+$('btn-plein-ecran').addEventListener('click', basculerPleinEcran);
+window.addEventListener('pointerdown', () => { if (lire('pleinEcranAuto') && !document.fullscreenElement && !pleinEcranTente) { pleinEcranTente = true; basculerPleinEcran(); } }, { once: false });
+let pleinEcranTente = false;
+
+// Bandeau haut : visible tant que la souris bouge, puis s'estompe.
+let timerBandeau = null;
+window.addEventListener('pointermove', () => {
+  $('version').closest('header').classList.add('visible');
+  clearTimeout(timerBandeau);
+  timerBandeau = setTimeout(() => $('version').closest('header').classList.remove('visible'), 2500);
+});
+
+// ---------- Boucle ----------
+
+let derniereImage = performance.now();
+function boucle(maintenant) {
+  const dt = Math.min(0.05, Math.max(0, (maintenant - derniereImage) / 1000));
+  derniereImage = maintenant;
+  if (!document.hidden) {
+    clavier.maj(dt);
+    bot.maj(dt);
+    phys.avancer(dt);
+    partie.maj(dt);
+  }
+  hud.majJauge(bot.actif ? bot.jauge() : clavier.jauge);
+  tempsGlobal += dt;
+  suivreSons(dt);
+  if (scene) {
+    scene.synchroniser(phys);
+    if (personnage) {
+      personnage.placer(partie.visee.position * (DIM.largeurPiste / 2 - DIM.rayonBoule - 0.02));
+      personnage.animer(dt, tempsGlobal);
+      positionMain.valeur = partie.phase === 'preparation' ? personnage.positionMain(positionMain.valeur || undefined) : null;
+    }
+    if (spectateurs) spectateurs.animer(dt, tempsGlobal);
+    scene.majPreparation(partie.visee, partie.phase === 'preparation', positionMain.valeur);
+    if (partie.phase === 'remise') scene.animerRemise(Math.min(1, partie.chrono / Math.max(0.1, lire('dureeRemise') || 2.6)), partie.modeRemise);
+    else scene.animerRemise(0, 'rack');
+    cameras.maj(dt, contexteCamera());
+    scene.rendre();
+  }
+  if (banc.ouvert) banc.dessinerGraphiques();
+  requestAnimationFrame(boucle);
+}
+document.addEventListener('visibilitychange', () => { derniereImage = performance.now(); });
+
+// ---------- Sons liés à la physique ----------
+
+const sons = { roulement: false, impact: false, gouttiere: false, yPrec: 0, vyPrec: 0 };
+function suivreSons() {
+  const b = phys.boule;
+  if (!audio.ctx) return;
+  if (b.enJeu && !b.termine) {
+    if (!sons.roulement) { audio.demarrerRoulement(); sons.roulement = true; sons.impact = false; sons.gouttiere = false; }
+    const p = b.corps.position, v = b.corps.velocity;
+    const surSol = p.y < DIM.rayonBoule + 0.03;
+    audio.majRoulement(v.length(), surSol);
+    if (!sons.impact && p.z < -DIM.longueurPiste + 0.25 && !b.gouttiere) {
+      sons.impact = true;
+      const vit = v.length();
+      audio.jouer(vit > 7 ? 'impact-fort' : vit > 5 ? 'impact-moyen' : 'impact-faible');
+    }
+    if (b.gouttiere && !sons.gouttiere) { sons.gouttiere = true; audio.jouer('gouttiere'); }
+    if (b.enLAir && surSol && sons.vyPrec < -1 && v.y > -0.5) audio.jouer('rebond');
+    sons.vyPrec = v.y;
+  } else if (sons.roulement) { audio.arreterRoulement(); sons.roulement = false; }
+}
+
+// ---------- Salle ----------
+
+const salle = new Salle({ serveur: reglages.get('serveurSignalisation') || '', delaiOubliMin: reglages.get('delaiPlace') || DELAI_OUBLI_PLACE_MIN });
+const banc = new Banc({ salle, profils, reglages, suivis, reglagesEffectifs, envoyerEtat, envoyerConfig, demarrerCalibration });
+const salon = new Salon($('salon'), {
+  match: () => match, salle, lire, regler: (id, v) => { reglages.set(id, v); apresChangementReglages(); },
+  commencer: demarrerPartie, reprendre: reprendrePartie, effacerSauvegarde: effacerPartie,
+  sauvegarde: () => { const s = chargerPartie(); return s ? { resume: resumerSauvegarde(s) } : null; },
+});
+const fin = new Fin($('fin'), { rejouer, salon: retourSalon });
+const titre = new Titre($('titre'), {
+  lire, nouvellePartie: () => { titre.afficher(false); retourSalon(); }, entrainement: (mode) => { location.href = 'index.html?mode=' + mode; },
+  profils: () => profilsUI.afficher(true), reglages: () => basculerTiroir(true), calibrage: () => banc.basculer(true),
+  reprendre: () => { titre.afficher(false); reprendrePartie(); }, sauvegarde: () => { const s = chargerPartie(); return s ? { resume: resumerSauvegarde(s) } : null; },
+});
+const profilsUI = new ProfilsUI($('profils'), { profils, fermer: () => profilsUI.afficher(false), apresModification: () => { cacheTextures.clear(); banc.redessinerProfils(); } });
+
+function allerAuTitre() {
+  if (match.etat === 'enCours') { if (!confirm('Abandonner la partie en cours ?')) return; effacerPartie(); }
+  bot.arreter();
+  partie.verrouille = true;
+  fin.cacher();
+  salon.afficher(false);
+  scoreboard.afficher(false);
+  hud.majTour({});
+  lierMatch(new Match({ nbFrames: Number(lire('nbFrames')) || 10, gouttieresFermees: !!lire('gouttieresFermees') }));
+  partie.reinitialiser();
+  if (cameras) cameras.definir('titre', contexteCamera(), true);
+  titre.afficher(true);
+  envoyerEtatATous();
+}
+
+salle.addEventListener('ouverte', (e) => {
+  localStorage.setItem('bowling.salle', e.detail.code);
+  afficherCode(e.detail.code);
+});
+salle.addEventListener('code-indisponible', () => { salle.ouvrir(nouveauCode()); });
+salle.addEventListener('signalisation', (e) => {
+  const b = $('badge-signalisation');
+  b.textContent = 'Signalisation : ' + (e.detail.etat === 'connecte' ? 'connectée' : 'déconnectée');
+  b.className = 'etiquette ' + (e.detail.etat === 'connecte' ? 'ok' : 'ko');
+});
+salle.addEventListener('erreur', (e) => { banc.noter('Erreur réseau (' + e.detail.type + ') : ' + e.detail.message); hud.message('Réseau : ' + e.detail.message, 4); });
+salle.addEventListener('refus', (e) => {
+  banc.noter('Connexion refusée pour « ' + (e.detail.nom || '?') + ' » : ' + (e.detail.raison === 'sallePleine' ? 'salle pleine (4 manettes)' : 'version du protocole différente'));
+});
+salle.addEventListener('joueur-arrive', (e) => {
+  const j = e.detail.joueur;
+  profils.assurer(j);
+  if (!suivis.has(j.jeton)) suivis.set(j.jeton, nouveauSuivi());
+  salle.envoyer(j, { type: TYPES.BIENVENUE, index: j.index, couleur: j.couleur, config: configPour(j), etat: etatPour(j) });
+  banc.creerCarte(j);
+  banc.majCarte(j);
+  majManettes();
+  banc.noter((e.detail.reprise ? 'Manette reconnectée : ' : 'Manette connectée : ') + j.nom);
+  hud.message((e.detail.reprise ? 'Manette reconnectée : ' : 'Manette connectée : ') + j.nom, 2.5);
+  assurerJoueurTelephone(j);
+  for (const jj of match.joueursParJeton(j.jeton)) match.modifierJoueur(jj.id, { connecte: true });
+  if (match.etat === 'salon') salon.rendre();
+  else { scoreboard.rendre(match); majBanniereTour(); }
+  salle.envoyer(j, { type: TYPES.ETAT, ...etatPour(j) });
+});
+salle.addEventListener('joueur-lien', (e) => {
+  const j = e.detail.joueur;
+  banc.majCarte(j);
+  majManettes();
+  for (const jj of match.joueursParJeton(j.jeton)) match.modifierJoueur(jj.id, { connecte: !!j.connecte });
+  if (match.etat === 'salon') salon.rendre();
+  else { scoreboard.rendre(match); majBanniereTour(); }
+});
+salle.addEventListener('joueur-latence', (e) => { banc.majLatence(e.detail.joueur); });
+salle.addEventListener('joueur-parti', (e) => {
+  const j = e.detail.joueur;
+  banc.retirerCarte(j);
+  suivis.delete(j.jeton);
+  majManettes();
+  banc.noter('Place libérée : ' + j.nom);
+  if (match.etat === 'salon') { for (const jj of match.joueursParJeton(j.jeton)) match.retirerJoueur(jj.id); salon.rendre(); }
+  else { for (const jj of match.joueursParJeton(j.jeton)) match.modifierJoueur(jj.id, { connecte: false }); scoreboard.rendre(match); majBanniereTour(); }
+});
+salle.addEventListener('message', (e) => gererMessage(e.detail.joueur, e.detail.message));
+
+function majManettes() {
+  banc.majBadgeManettes();
+  hud.majRejoindre({ nbManettes: salle.liste.filter((j) => j.connecte).length });
+}
+
+// ---------- Messages des manettes ----------
+
+function gererMessage(j, m) {
+  const s = suivis.get(j.jeton);
+  if (!s) return;
+  switch (m.type) {
+    case TYPES.ECHANTILLON: {
+      if (typeof m.t !== 'number') return;
+      const p = preparerEchantillon(m);
+      s.historique.push(p);
+      if (s.historique.length > 900) s.historique.splice(0, s.historique.length - 900);
+      s.dernierEch = p;
+      if (s.geste && !s.geste.termine && p.t >= s.geste.tPose - 20) ajouterAuGeste(s.geste, p);
+      break;
+    }
+    case TYPES.POSE: {
+      if (typeof m.t !== 'number') return;
+      if (!j.actif || !lancerAutorise('telephone', j.jeton)) {
+        salle.envoyer(j, { type: TYPES.RESULTAT, resultat: 'refuse', raison: 'pasTonTour' });
+        banc.journaliser(j, { type: 'refuse', raison: 'pasTonTour', mode: reglagesEffectifs(j).modeLancer, instant: m.t });
+        return;
+      }
+      if (s.timerFin) { clearTimeout(s.timerFin); s.timerFin = null; }
+      const p = profils.get(j.jeton);
+      if (personnage) personnage.armer(true);
+      s.geste = nouveauGeste(m.t, reglagesEffectifs(j), s.dernierEch, p ? p.directionAvant : null);
+      s.glisser = null;
+      s.marqueurs.push({ t: m.t, type: 'pose' });
+      break;
+    }
+    case TYPES.GLISSER: {
+      s.glisser = m;
+      break;
+    }
+    case TYPES.LEVE: {
+      if (personnage) personnage.armer(false);
+      if (typeof m.t !== 'number' || !s.geste || s.geste.termine) return;
+      const R = s.geste.reglages;
+      const delai = Math.min(300, R.toleranceRelacher + 80);
+      const geste = s.geste;
+      s.timerFin = setTimeout(() => { if (s.geste === geste) finaliserLancer(j, s, m.t); }, delai);
+      break;
+    }
+    case TYPES.VISEE: {
+      if (!lancerAutorise('telephone', j.jeton) && !(attentePassage && manetteDuJoueurCourant(j))) return;
+      if (m.quoi === 'position' || m.quoi === 'angle') partie.viser(m.quoi, m.sens < 0 ? -1 : 1);
+      break;
+    }
+    case TYPES.SAUT: {
+      if (passer()) hud.message('Passé (' + j.nom + ')', 0.8);
+      break;
+    }
+    case TYPES.COMMENCER: {
+      if (match.etat === 'salon' && salle.liste[0] === j) demarrerPartie();
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+function finaliserLancer(j, s, tLeve) {
+  s.timerFin = null;
+  const geste = s.geste;
+  const R = geste.reglages;
+  let res;
+  if (R.modeLancer === 'glisser') {
+    res = resultatGlisser(s.glisser, R, tLeve - geste.tPose);
+    geste.termine = true;
+  } else {
+    res = terminerGeste(geste, tLeve);
+  }
+  res.tPose = geste.tPose;
+  res.tLeve = tLeve;
+  res.latence = j.latence;
+  s.marqueurs.push({ t: tLeve, type: 'leve' });
+  if (res.type === 'lancer') s.marqueurs.push({ t: res.instant, type: 'instant' });
+  if (s.marqueurs.length > 60) s.marqueurs.splice(0, s.marqueurs.length - 60);
+  s.dernierResultat = res;
+
+  // Calibration du sens avant : moyenne des directions au relâcher sur 3 lancers valides
+  if (s.calibration && res.type === 'lancer' && Array.isArray(res.vPose) && vec.norme(res.vPose) > 0.3) {
+    s.calibration.vecteurs.push(vec.normalise(res.vPose));
+    if (s.calibration.vecteurs.length >= 3) {
+      const somme = s.calibration.vecteurs.reduce((acc, v) => vec.add(acc, v), [0, 0, 0]);
+      profils.setDirection(j.jeton, vec.normalise(somme));
+      s.calibration = null;
+      banc.noter('Sens avant calibré pour ' + j.nom);
+    }
+  }
+  if (res.type === 'lancer') profils.compterLancer(j.jeton);
+
+  // Le lancer part dans le jeu si c'est bien le tour d'un joueur porté par ce téléphone.
+  if (res.type === 'lancer') {
+    const jc = match.joueurCourant();
+    if (lancerAutorise('telephone', j.jeton)) {
+      if (jc) dernierLanceurParJeton.set(j.jeton, jc.id);
+      if (entrainement) { if (scene) scene.couleurBoule(couleurHex(j.couleur)); if (personnage) personnage.appliquerProfil(profilPersonnage({ nom: j.nom, couleur: j.couleur, jeton: j.jeton, main: j.main, type: 'telephone' })); }
+      const ok = partie.lancer({ puissance: res.puissance, effet: res.effet, phase: res.phase, joueur: jc ? jc.id : j.jeton, nom: jc ? jc.nom : j.nom });
+      if (!ok) { res.type = 'refuse'; res.raison = 'pasTonTour'; }
+    } else { res.type = 'refuse'; res.raison = 'pasTonTour'; }
+  }
+
+  salle.envoyer(j, { type: TYPES.RESULTAT, resultat: res.type, puissance: res.puissance, effet: res.effet, phase: res.phase, raison: res.raison });
+  banc.journaliser(j, res);
+  banc.majCarte(j);
+  banc.afficherDernier(j, res);
+}
+
+function demarrerCalibration(j) {
+  const s = suivis.get(j.jeton);
+  if (!s) return;
+  s.calibration = { vecteurs: [] };
+  banc.majCarte(j);
+  envoyerEtat(j, 'Calibrage : 3 lancers normaux');
+}
+
+// ---------- Code de salle et QR ----------
+
+function afficherCode(code) {
+  $('code').textContent = code;
+  hud.majRejoindre({ code });
+  majQR();
+  salon.majCode(code, dernierSvgQR);
+}
+let dernierSvgQR = '';
+
+function lienManette() {
+  const code = salle.code || '';
+  if (!adresseManette) return '';
+  const srv = reglages.get('serveurSignalisation');
+  return adresseManette + '?salle=' + encodeURIComponent(code) + (srv ? '&srv=' + encodeURIComponent(srv) : '');
+}
+
+function majQR() {
+  const conteneur = $('qr');
+  const aide = $('qr-aide');
+  conteneur.textContent = '';
+  const lien = lienManette();
+  if (!lien) {
+    aide.textContent = 'Renseigne l’adresse en ligne de manette.html (ci-dessous) pour obtenir le QR code. Sans QR, les téléphones peuvent ouvrir cette adresse et saisir le code.';
+    hud.majRejoindre({ svg: '<div class="hud-qr-vide">adresse de la manette à renseigner dans le banc (C)</div>' });
+    return;
+  }
+  try {
+    const qr = qrcode(0, 'M');
+    qr.addData(lien);
+    qr.make();
+    const svg = qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+    conteneur.innerHTML = svg;
+    hud.majRejoindre({ svg });
+    dernierSvgQR = svg;
+    salon.majCode(salle.code || '', svg);
+    aide.textContent = lien;
+  } catch (e) {
+    aide.textContent = 'QR code impossible : ' + e.message;
+  }
+}
+
+$('adresse-manette').value = adresseManette;
+$('adresse-manette').addEventListener('change', (e) => {
+  adresseManette = e.target.value.trim();
+  localStorage.setItem('bowling.adresseManette', adresseManette);
+  majQR();
+});
+$('btn-nouveau-code').addEventListener('click', () => { if (confirm('Changer le code déconnecte les manettes en place. Continuer ?')) salle.ouvrir(nouveauCode()); });
+$('btn-copier').addEventListener('click', async () => {
+  const lien = lienManette();
+  if (!lien) { banc.noter('Aucun lien : renseigne d’abord l’adresse de la manette.'); return; }
+  try { await navigator.clipboard.writeText(lien); banc.noter('Lien copié.'); } catch (e) { banc.noter('Copie impossible, lien : ' + lien); }
+});
+$('btn-banc').addEventListener('click', () => banc.basculer());
+
+// ---------- Réglages (tiroir) ----------
+
+function apresChangementReglages() {
+  for (const j of salle.liste) envoyerConfig(j);
+  banc.redessinerProfils();
+  majQR();
+  phys.majMateriaux();
+  phys.reglerBumpers(!!lire('gouttieresFermees'));
+  if (match.etat === 'salon') { match.reglerOptions({ nbFrames: Number(lire('nbFrames')) || 10, gouttieresFermees: !!lire('gouttieresFermees') }); salon.rendre(); }
+  if (scene) { scene.majQualite(); scene.majEnseigne(); }
+  hud.majTailleTextes();
+  audio.majVolumes();
+  audio.majMusique();
+  if (spectateurs) spectateurs.groupe.visible = lire('spectateurs') !== false;
+  hud.basculerAide(!!lire('afficherAide'));
+  hud.basculerRejoindre(!!lire('afficherRejoindre'));
+}
+
+rendrePanneau($('reglages-contenu'), reglages, apresChangementReglages);
+
+function basculerTiroir(force) {
+  const t = $('tiroir');
+  const ouvrir = force == null ? t.classList.contains('cache') : force;
+  t.classList.toggle('cache', !ouvrir);
+}
+$('btn-reglages').addEventListener('click', () => basculerTiroir());
+$('btn-fermer-reglages').addEventListener('click', () => basculerTiroir(false));
+
+$('btn-exporter').addEventListener('click', () => {
+  const contenu = JSON.stringify({ version: VERSION, date: new Date().toISOString(), reglages: reglages.exporter(), profils: profils.exporter() }, null, 2);
+  telecharger('bowling-reglages.json', contenu, 'application/json');
+});
+$('fichier-import').addEventListener('change', async (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try {
+    const obj = JSON.parse(await f.text());
+    if (obj.reglages) reglages.importer(obj.reglages);
+    if (obj.profils) profils.importer(obj.profils);
+    rendrePanneau($('reglages-contenu'), reglages, apresChangementReglages);
+    apresChangementReglages();
+    banc.noter('Réglages importés.');
+  } catch (err) {
+    banc.noter('Import impossible : ' + err.message);
+  }
+  e.target.value = '';
+});
+$('btn-reinit').addEventListener('click', () => {
+  if (!confirm('Remettre tous les réglages à leur valeur par défaut ? (les profils sont conservés)')) return;
+  reglages.reinitialiser();
+  rendrePanneau($('reglages-contenu'), reglages, apresChangementReglages);
+  apresChangementReglages();
+});
+
+// ---------- Démarrage ----------
+
+$('version').textContent = VERSION;
+hud.majEtat({ phase: 'preparation', boule: 1, frame: 1, debout: 10 });
+hud.majVisee(partie.visee);
+majManettes();
+majQR();
+scoreboard.afficher(false);
+if (MODE !== 'partie') { salon.afficher(false); demarrerEntrainement(); }
+else { salon.afficher(false); titre.afficher(true); }
+$('btn-menu').addEventListener('click', () => { if (entrainement) location.href = 'index.html'; else allerAuTitre(); });
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+demarrerRendu().then(() => requestAnimationFrame(boucle));
+const codeSauve = localStorage.getItem('bowling.salle');
+salle.ouvrir(codeValide(codeSauve) ? codeSauve : nouveauCode());
+window.addEventListener('beforeunload', () => salle.fermer());

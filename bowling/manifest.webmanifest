@@ -1,0 +1,17 @@
+{
+  "name": "Bowling",
+  "short_name": "Bowling",
+  "description": "Bowling façon Wii Sports : l'écran du PC pour la partie, les iPhone comme manettes à mouvement.",
+  "lang": "fr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#1a1d27",
+  "theme_color": "#1a1d27",
+  "icons": [
+    { "src": "icones/icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icones/icone-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

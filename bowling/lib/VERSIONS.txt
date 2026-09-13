@@ -1,0 +1,8 @@
+peerjs 1.5.5 - https://peerjs.com - MIT
+qrcode-generator 2.0.4 - https://github.com/kazuhikoarase/qrcode-generator - MIT
+three 0.186.0 - https://threejs.org - MIT (three/three.module.js + three.core.js, + RoomEnvironment.js et OrbitControls.js des exemples)
+cannon-es 0.20.0 - https://github.com/pmndrs/cannon-es - MIT
+
+Ces fichiers sont copies tels quels (aucune dependance CDN a l execution).
+Les modules importent "three" via l'import map declaree dans index.html.
+Pour mettre a jour : npm pack <paquet>, puis remplacer le fichier.

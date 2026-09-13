@@ -1,0 +1,1 @@
+Sons optionnels (CC0). Si un fichier du nom attendu est present ici, il remplace le son synthetise. Liste des noms : voir README (lot 4).

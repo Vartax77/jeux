@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#111318">
+  <title>Bowling — Manette</title>
+  <link rel="stylesheet" href="css/manette.css">
+  <link rel="manifest" href="manette.webmanifest">
+  <link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Manette">
+  <meta name="theme-color" content="#12151c">
+</head>
+<body>
+  <div id="app" class="app">
+
+    <section id="ecran-accueil" class="ecran">
+      <div class="entete-accueil">
+        <h1>Bowling</h1>
+        <p class="sous-titre">Manette</p>
+      </div>
+      <label>Code de la salle
+        <input id="code" type="text" maxlength="5" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="ABCDE">
+      </label>
+      <label>Ton prénom
+        <input id="nom" type="text" maxlength="14" autocomplete="given-name" autocorrect="off" placeholder="Prénom">
+      </label>
+      <div class="ligne">
+        <span>Couleur</span>
+        <div id="couleurs" class="couleurs"></div>
+      </div>
+      <div class="ligne">
+        <span>Main</span>
+        <div id="mains" class="segment">
+          <button type="button" data-main="droite">Droite</button>
+          <button type="button" data-main="gauche">Gauche</button>
+        </div>
+      </div>
+      <button id="btn-rejoindre" class="principal" type="button">Activer les capteurs et rejoindre</button>
+      <p id="accueil-message" class="message"></p>
+      <p class="note">Les capteurs de mouvement ne servent que pendant la partie ; les données restent sur le Wi-Fi local.</p>
+    </section>
+
+    <section id="ecran-manette" class="ecran cache">
+      <header class="bandeau">
+        <span id="pastille" class="pastille"></span>
+        <span id="m-nom" class="nom"></span>
+        <span id="m-etat" class="etat">Connexion…</span>
+        <span id="m-latence" class="latence"></span>
+      </header>
+      <div id="m-message" class="message-jeu"></div>
+      <div class="visee">
+        <div class="ligne-visee">
+          <span>Position</span>
+          <button type="button" class="fleche" data-visee="position" data-sens="-1">◀</button>
+          <output id="v-position">0,00</output>
+          <button type="button" class="fleche" data-visee="position" data-sens="1">▶</button>
+        </div>
+        <div class="ligne-visee">
+          <span>Angle</span>
+          <button type="button" class="fleche" data-visee="angle" data-sens="-1">◀</button>
+          <output id="v-angle">0,0°</output>
+          <button type="button" class="fleche" data-visee="angle" data-sens="1">▶</button>
+        </div>
+      </div>
+      <div id="zone-lancer" class="zone-lancer">
+        <div id="zl-titre">LANCER</div>
+        <div id="zl-texte">Pose le pouce, balance, lève le pouce</div>
+      </div>
+      <footer class="pied">
+        <span id="m-mode">Relâcher</span>
+        <span id="m-capteurs">Capteurs : –</span>
+        <span id="m-veille">Écran : –</span>
+        <button id="btn-quitter" type="button">Quitter</button>
+      </footer>
+    </section>
+
+  </div>
+  <script src="lib/peerjs.min.js"></script>
+  <script type="module" src="js/manette/main.js"></script>
+</body>
+</html>
