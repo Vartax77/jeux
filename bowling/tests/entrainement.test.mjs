@@ -3,6 +3,8 @@ import { MondePhysique, configurerDimensions, positionsQuilles, nbQuillesRangs }
 import { Entrainement, CONFIGS_SPARES, rangsPuissance, barriereEffet } from '../js/ecran/jeu/entrainement.js';
 import { Partie } from '../js/ecran/jeu/partie.js';
 
+// Tests déterministes : pas d'aléa sur la masse des quilles
+const SANS_ALEA = (id) => (id === 'aleaQuilles' ? 0 : undefined);
 let echecs = 0;
 const verifier = (nom, cond, detail = '') => { console.log((cond ? '  ✓ ' : '  ✗ ') + nom + (cond ? '' : '   ' + detail)); if (!cond) echecs++; };
 
@@ -12,7 +14,7 @@ verifier('rang 13 à 3,17 m derrière la quille 1', Math.abs(positionsQuilles(13
 
 console.log('Spares');
 {
-  const phys = new MondePhysique();
+  const phys = new MondePhysique(SANS_ALEA);
   const partie = new Partie(phys, () => undefined);
   const e = new Entrainement('spares', phys, () => undefined);
   partie.suivant = (res) => e.suivant(res);
@@ -58,7 +60,7 @@ console.log('Lancers puissants');
 
 console.log('Contrôle de l’effet');
 {
-  const phys = new MondePhysique();
+  const phys = new MondePhysique(SANS_ALEA);
   const e = new Entrainement('effet', phys, () => undefined);
   e.preparer();
   verifier('barrière posée', !!phys.barriere && phys.barriere.config.jusquA === 0.05);

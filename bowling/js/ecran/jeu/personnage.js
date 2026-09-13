@@ -130,9 +130,29 @@ export class Personnage {
   placer(x) { this.x = x; }
 
   // Pouce posé : balancier visible.
-  armer(actif) { this.arme = actif; if (actif && this.etat === 'repos') this.etat = 'balancier'; if (!actif && this.etat === 'balancier') this.etat = 'repos'; }
+  armer(actif) {
+    this.arme = actif;
+    if (actif && this.etat === 'repos') this.etat = 'balancier';
+    if (!actif && this.etat === 'balancier') this.etat = 'repos';
+    if (!actif) this.angleDirect = null;
+  }
 
-  lancer() { this.etat = 'lancer'; this.chrono = 0; this.arme = false; }
+  // Angle du bras piloté par le téléphone (radians, négatif = bras en arrière). null = animation scriptée.
+  // Alimenté à 60 Hz par les capteurs tant que le pouce est posé.
+  piloterBras(angle) {
+    this.angleDirect = angle;
+    if (this.etat === 'repos') this.etat = 'balancier';
+  }
+
+  lancer() {
+    // Le mouvement de lâcher démarre à l'angle réel où était le bras : pas de saut visuel.
+    this.angleDepart = this.angleLisse != null ? this.angleLisse : -1.4;
+    this.etat = 'lancer';
+    this.chrono = 0;
+    this.arme = false;
+    this.angleDirect = null;
+    this.angleLisse = null;
+  }
 
   // type : 'joie' (strike/spare), 'deception' (gouttière, zéro), 'hausse' (autre)
   reagir(type) { this.etat = type; this.chrono = 0; }
@@ -149,17 +169,28 @@ export class Personnage {
     let zCorps = 1.15, yCorps = 0, incl = 0, rotLanceur = 0, rotAutre = 0, tourne = 0;
     switch (this.etat) {
       case 'balancier': {
-        const w = Math.sin(tempsGlobal * 2.2);
-        rotLanceur = -0.9 + w * 0.5;           // bras qui balance derrière
-        rotAutre = 0.2;
-        incl = 0.08;
-        zCorps = 1.15 + Math.sin(tempsGlobal * 2.2) * 0.03;
+        if (this.angleDirect != null) {
+          // Le bras suit le téléphone en direct : lissage court (60 ms) pour absorber le bruit des capteurs
+          // sans donner de retard perceptible.
+          this.angleLisse = this.angleLisse == null ? this.angleDirect : this.angleLisse + (this.angleDirect - this.angleLisse) * Math.min(1, dt / 0.06);
+          rotLanceur = this.angleLisse;
+          rotAutre = 0.2 - this.angleLisse * 0.15;
+          incl = Math.max(0, -this.angleLisse) * 0.12;      // il se penche quand le bras part en arrière
+          zCorps = 1.15 - Math.max(0, this.angleLisse) * 0.14; // et avance (vers la piste) quand le bras vient devant
+        } else {
+          const w = Math.sin(tempsGlobal * 2.2);
+          rotLanceur = -0.9 + w * 0.5;         // balancier scripté (secours : pas de gyroscope)
+          rotAutre = 0.2;
+          incl = 0.08;
+          zCorps = 1.15 + Math.sin(tempsGlobal * 2.2) * 0.03;
+        }
         break;
       }
       case 'lancer': {
         const t = Math.min(1, this.chrono / 0.7);
         const e = t * t * (3 - 2 * t);
-        rotLanceur = -1.4 + e * 2.4;          // de derrière à devant
+        const depart = this.angleDepart == null ? -1.4 : this.angleDepart;
+        rotLanceur = depart + e * (1.0 - depart); // de l'angle réel du lâcher jusqu'au prolongement devant
         rotAutre = 0.3 - e * 0.4;
         zCorps = 1.15 - e * 0.45;             // pas en avant
         incl = 0.25 * Math.sin(t * Math.PI);

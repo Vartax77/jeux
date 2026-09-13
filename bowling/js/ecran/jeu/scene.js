@@ -223,8 +223,9 @@ export class Scene3D {
     liseret.position.set(0, 0.95, -(D.longueurPiste + D.longueurDeck) - 0.35);
     this.scene.add(liseret);
     // Fosse noire (ouverture sous le panneau)
-    const fosse = new THREE.Mesh(new THREE.BoxGeometry(D.largeurPiste + 2 * D.largeurGouttiere + 0.2, 0.9, D.longueurFosse + 0.4), mat('#07080b'));
-    fosse.position.set(0, 0.45 - D.profondeurFosse, -(D.longueurPiste + D.longueurDeck) - D.longueurFosse / 2);
+    const longueurFosseVisible = D.longueurFosse + D.longueurDeck + 0.3;
+    const fosse = new THREE.Mesh(new THREE.BoxGeometry(D.largeurPiste + 2 * D.largeurGouttiere + 0.2, 0.9, longueurFosseVisible), mat('#07080b'));
+    fosse.position.set(0, 0.45 - D.profondeurFosse - 0.02, -(D.longueurPiste - 0.3) - longueurFosseVisible / 2);
     this.scene.add(fosse);
   }
 
@@ -264,11 +265,12 @@ export class Scene3D {
         const xg = D.largeurPiste / 2 + D.largeurGouttiere / 2;
         // Gouttière : chenal creux (demi-tube), fond à la profondeur physique
         const rayonG = D.largeurGouttiere / 2;
-        const geoG = new THREE.CylinderGeometry(rayonG, rayonG, longueurPiste, 20, 1, true, 0, Math.PI);
+        const longueurG = D.longueurPiste - 0.3;   // la gouttière s'ouvre sur la fosse le long du deck
+        const geoG = new THREE.CylinderGeometry(rayonG, rayonG, longueurG, 20, 1, true, 0, Math.PI);
         geoG.rotateX(Math.PI / 2);
         geoG.rotateZ(-Math.PI / 2);
         const g = new THREE.Mesh(geoG, matGouttiere);
-        g.position.set(s * xg, rayonG - D.profondeurGouttiere, -longueurPiste / 2);
+        g.position.set(s * xg, rayonG - D.profondeurGouttiere, -longueurG / 2);
         g.receiveShadow = true;
         grp.add(g);
         // Bord extérieur fin (capping) au niveau de la piste

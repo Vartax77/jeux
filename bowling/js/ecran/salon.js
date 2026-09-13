@@ -32,6 +32,14 @@ export class Salon {
     if (visible) this.rendre();
   }
 
+  // Replié pendant un calibrage : on voit la scène et le personnage, un petit bandeau rappelle le salon.
+  replier(actif) {
+    this.racine.classList.toggle('replie', !!actif);
+    let b = this.racine.querySelector('.salon-replie');
+    if (actif && !b) { b = el('div', { class: 'salon-replie' }, 'Salon en pause : calibrage en cours (banc C pour annuler)'); this.racine.prepend(b); }
+    if (!actif && b) b.remove();
+  }
+
   majCode(code, svg) {
     this.code = code || '';
     this.qrSvg = svg || '';

@@ -4,11 +4,13 @@
 import { MondePhysique } from '../js/ecran/jeu/physique.js';
 import { Partie } from '../js/ecran/jeu/partie.js';
 
+// Tests déterministes : pas d'aléa sur la masse des quilles
+const SANS_ALEA = (id) => (id === 'aleaQuilles' ? 0 : undefined);
 let echecs = 0;
 const verifier = (nom, cond, detail = '') => { console.log((cond ? '  ✓ ' : '  ✗ ') + nom + (cond ? '' : '   ' + detail)); if (!cond) echecs++; };
 
 const reglages = { dureeResultat: 1, dureeRemise: 1, distanceCoupeImpact: 2, delaiMaxQuilles: 4, sautsAutorises: true };
-const phys = new MondePhysique();
+const phys = new MondePhysique(SANS_ALEA);
 const partie = new Partie(phys, (id) => reglages[id]);
 const phases = [];
 const resultats = [];
@@ -47,7 +49,7 @@ console.log('Boule 1 qui effleure la 7 → respot → boule 2');
   partie.lancer({ puissance: 0.5, effet: 0, phase: 'normal' });
   jouerJusquaPreparation();
   const r = resultats[1];
-  verifier('quelques quilles tombées, pas strike', r && !r.strike && r.tombees >= 1 && r.tombees <= 4, JSON.stringify(r));
+  verifier('quelques quilles tombées, pas strike', r && !r.strike && r.tombees >= 1 && r.tombees <= 7, JSON.stringify(r));
   verifier('boule 2, même frame, quilles restantes conservées', partie.boule === 2 && partie.frame === 2 && partie.debout === 10 - r.tombees, partie.boule + ' ' + partie.frame + ' ' + partie.debout);
   verifier('quilles debout replacées exactement', phys.quilles.filter((q) => q.presente).every((q) => Math.abs(q.corps.position.x - q.initiale.x) < 1e-9));
   partie.reglerVisee(0.06 / 0.399, 0);

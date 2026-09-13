@@ -43,11 +43,11 @@ export function nbQuillesRangs(rangs) { return (rangs * (rangs + 1)) / 2; }
 
 // Réglages lus à chaque usage via lire(id), pour que le panneau agisse immédiatement.
 const DEFAUTS = {
-  vMin: 4, vMax: 9, gainEffet: 2.5, debutCrochet: 60, vitesseLob: 2.5, perteLob: 0.35,
-  masseBoule: 6.8, masseQuille: 1.2, frottementPiste: 0.04, rebondPiste: 0.05,
-  frottementQuille: 0.2, rebondQuille: 0.35, frottementBouleQuille: 0.1, rebondBouleQuille: 0.4,
-  frottementQuilleQuille: 0.1, rebondQuilleQuille: 0.7, rebondKickback: 0.6,
-  amortissementQuille: 0.2, delaiMaxQuilles: 4, seuilChute: 40, deplacementChute: 0.3, glisseInitiale: 0.9,
+  vMin: 4, vMax: 9, gainEffet: 0.9, debutCrochet: 45, finCrochet: 88, inclinaisonAxe: 0.55, vitesseLob: 2.5, perteLob: 0.35,
+  masseBoule: 6.8, masseQuille: 1.4, frottementPiste: 0.04, rebondPiste: 0.05,
+  frottementQuille: 0.25, rebondQuille: 0.4, frottementBouleQuille: 0.1, rebondBouleQuille: 0.4,
+  frottementQuilleQuille: 0.1, rebondQuilleQuille: 0.7, rebondKickback: 0.75, resistanceRoulement: 2.5,
+  amortissementQuille: 0.08, delaiMaxQuilles: 4, seuilChute: 40, deplacementChute: 0.3, glisseInitiale: 0.9,
   gouttieresFermees: false, formeQuille: 'spheres', inertieQuille: 1, aleaQuilles: 0.1,
 };
 
@@ -55,13 +55,13 @@ export class MondePhysique {
   constructor(lire = null, { rangs = 4 } = {}) {
     this.rangs = rangs;
     this.lire = (id) => { const v = lire ? lire(id) : undefined; return v === undefined || v === null ? DEFAUTS[id] : v; };
-    this.pasFixe = 1 / 120;
+    this.pasFixe = 1 / 240;   // 240 Hz : une quille lancée à 8 m/s avance de 3 cm par pas, moins que sa tête (7 cm) — plus de traversées
     this.accumulateur = 0;
     this.temps = 0;
 
     const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.81, 0), allowSleep: true });
     world.broadphase = new CANNON.SAPBroadphase(world);
-    world.solver.iterations = 14;
+    world.solver.iterations = 20;
     world.defaultContactMaterial.friction = 0.3;
     world.defaultContactMaterial.restitution = 0.1;
     this.world = world;
@@ -106,9 +106,12 @@ export class MondePhysique {
     this._boiteStatique(demiPiste, 0.05, (L + deck) / 2, 0, -0.05, -(L + deck) / 2);
     // Approche : toute la largeur, de la ligne de faute vers +z
     this._boiteStatique(largeurTotale / 2, 0.05, (D.approche + 1) / 2, 0, -0.05, (D.approche + 1) / 2);
-    // Gouttières
+    // Gouttières : jusqu'au début du deck seulement. Le long du deck, elles s'ouvrent sur la fosse : une quille
+    // qui y tombe est hors jeu et disparaît proprement, au lieu de rester coincée entre gouttière, paroi et bord
+    // du deck (coin de boîtes statiques dont le solveur l'éjectait en l'air).
+    const zK0 = -(L - 0.3);
     const xg = demiPiste + D.largeurGouttiere / 2;
-    for (const s of [-1, 1]) this._boiteStatique(D.largeurGouttiere / 2, 0.05, (L + deck) / 2, s * xg, -D.profondeurGouttiere - 0.05, -(L + deck) / 2);
+    for (const s of [-1, 1]) this._boiteStatique(D.largeurGouttiere / 2, 0.05, -zK0 / 2, s * xg, -D.profondeurGouttiere - 0.05, zK0 / 2);
     // Murs extérieurs : le long de la piste (bas), puis « kickbacks » plus hauts le long du deck et de la fosse,
     // sur lesquels les quilles rebondissent (comme dans un vrai bowling).
     const xm = demiPiste + D.largeurGouttiere + 0.03;
@@ -120,8 +123,9 @@ export class MondePhysique {
     }
     // Deck élargi (entraînement Lancers puissants) : les quilles des grands racks débordent de la piste
     if (D.largeurDeckExtra > 0) this._boiteStatique(D.largeurDeckExtra, 0.05, (deck + 0.5) / 2, 0, -0.05, zK - (deck + 0.5) / 2 + 0.5);
-    // Fosse : plancher et fond
-    this._boiteStatique(largeurTotale / 2, 0.05, fosse / 2, 0, -D.profondeurFosse - 0.05, -(L + deck) - fosse / 2);
+    // Fosse : plancher (sous le deck aussi, pour ce qui tombe à côté) et fond
+    const longueurFosseTotale = fosse + deck + 0.3;
+    this._boiteStatique(largeurTotale / 2, 0.05, longueurFosseTotale / 2, 0, -D.profondeurFosse - 0.05, zK0 - longueurFosseTotale / 2);
     this._boiteStatique(largeurTotale / 2, 0.8, 0.05, 0, -D.profondeurFosse + 0.8, -(L + deck + fosse) - 0.05);
     // Mur du fond de l'approche (boule lancée en arrière)
     this._boiteStatique(largeurTotale / 2, 0.6, 0.05, 0, 0.6, D.approche + 0.6);
@@ -141,7 +145,7 @@ export class MondePhysique {
     this.quilles = positionsQuilles(this.rangs).map((p, i) => {
       const corps = new CANNON.Body({
         mass: this.lire('masseQuille'), material: this.matQuille,
-        linearDamping: 0.02, angularDamping: this.lire('amortissementQuille'), allowSleep: true, sleepSpeedLimit: 0.12, sleepTimeLimit: 0.6,
+        linearDamping: 0.02, angularDamping: this.lire('amortissementQuille'), allowSleep: true, sleepSpeedLimit: 0.06, sleepTimeLimit: 0.8,
       });
       // Base plate (cylindre bas : la quille tient debout) + trois sphères (ventre, cou, tête : contacts lisses
       // boule/quille et quille/quille). Origine du corps au centre de gravité.
@@ -153,6 +157,7 @@ export class MondePhysique {
         corps.addShape(new CANNON.Cylinder(0.05, 0.05, 0.06, 12), new CANNON.Vec3(0, 0.03 - cg, 0));
         corps.addShape(new CANNON.Sphere(0.06), new CANNON.Vec3(0, 0.105 - cg, 0));
         corps.addShape(new CANNON.Sphere(0.045), new CANNON.Vec3(0, 0.205 - cg, 0));
+        corps.addShape(new CANNON.Sphere(0.033), new CANNON.Vec3(0, 0.275 - cg, 0));
         corps.addShape(new CANNON.Sphere(0.036), new CANNON.Vec3(0, 0.335 - cg, 0));
       }
       corps.position.set(p.x, cg, p.z);
@@ -330,7 +335,10 @@ export class MondePhysique {
     c.quaternion.set(0, 0, 0, 1);
     c.velocity.set(dirX * vitesse, vy, dirZ * vitesse);
     const roulement = (vitesse / D.rayonBoule) * this.lire('glisseInitiale');
-    c.angularVelocity.set(dirZ * roulement, 0, -dirX * roulement);
+    // Axe de rotation incliné par le lift : la boule tourne visiblement sur le côté, et cette composante
+    // verticale est ce qui la fait virer quand elle accroche.
+    const inclinaison = effet * this.lire('inclinaisonAxe');
+    c.angularVelocity.set(dirZ * roulement, roulement * inclinaison, -dirX * roulement);
     c.force.set(0, 0, 0); c.torque.set(0, 0, 0);
     c.wakeUp();
     Object.assign(b, { enJeu: true, lance: { position, angle: params.angle, puissance, effet, phase, vitesse }, gouttiere: false, dansFosse: false, enLAir: false, arret: false, termine: false, tempsLent: 0, distanceMax: 0, tempsLancer: this.temps });
@@ -346,20 +354,35 @@ export class MondePhysique {
     this.boule.termine = true;
   }
 
+  // Trajectoire en trois phases, comme une vraie boule :
+  //   glisse  (0 → debutCrochet)      : la boule patine sur l'huile, elle va droit ;
+  //   crochet (debutCrochet → finCrochet) : elle accroche le sec, l'axe de rotation la fait virer ;
+  //   roulement (au-delà)             : elle roule enfin, plus de dérive — elle file droit dans sa nouvelle direction.
+  // La phase de crochet est courte et franche : c'est ce point de cassure qui rend la trajectoire lisible
+  // et qui donne un angle d'entrée en poche (bien plus efficace qu'une boule droite).
   _appliquerCrochet() {
     const b = this.boule, D = DIM;
     if (!b.enJeu || !b.lance || b.gouttiere || b.dansFosse) return;
+    if (!b.lance.effet) return;
     const p = b.corps.position;
-    if (p.z > 0 || p.z < -D.longueurPiste || Math.abs(p.x) > D.largeurPiste / 2 || p.y > D.rayonBoule + 0.03) return;
+    if (p.z > 0 || p.z < -D.longueurPiste || Math.abs(p.x) > D.largeurPiste / 2 + 0.1 || p.y > D.rayonBoule + 0.03) return;
     const progression = -p.z / D.longueurPiste;
     const debut = this.lire('debutCrochet') / 100;
-    if (progression <= debut) return;
-    const t = (progression - debut) / Math.max(0.05, 1 - debut);
-    // Une boule lente crochète plus qu'une boule rapide (moins de temps de glisse sur le sec) : facteur 1,3 → 0,7 selon la puissance.
-    const facteurVitesse = 1.3 - 0.6 * b.lance.puissance;
-    const ax = b.lance.effet * this.lire('gainEffet') * facteurVitesse * t * t;
-    // Nudge de vitesse latérale + rotation de roulement cohérente : la boule « roule » sur sa nouvelle trajectoire
-    // au lieu de glisser (sinon le frottement de la piste annulerait l'effet).
+    const fin = Math.max(debut + 0.05, this.lire('finCrochet') / 100);
+    if (progression <= debut || progression >= fin) return;
+    // Profil en cloche sur la phase de crochet : accroche progressive, apogée au milieu, relâche en fin de virage
+    const t = (progression - debut) / (fin - debut);
+    const cloche = Math.sin(Math.PI * t);
+    // La déviation doit dépendre de la DISTANCE parcourue, pas du temps passé : sans cela une boule lente,
+    // qui reste deux fois plus longtemps dans la zone, dévierait quatre fois plus. On met donc l'accélération
+    // à l'échelle du carré de la vitesse (v / 6,5 m/s), puis on laisse un écart volontaire et mesuré :
+    // une boule lente accroche un peu plus qu'une boule lancée à fond.
+    const v = b.corps.velocity.length();
+    const echelle = (v / 6.5) ** 2;
+    const facteurVitesse = 1.25 - 0.5 * b.lance.puissance;
+    const ax = b.lance.effet * this.lire('gainEffet') * facteurVitesse * echelle * cloche;
+    // Décalage de vitesse latérale + rotation de roulement cohérente : la boule roule sur sa nouvelle trajectoire
+    // au lieu de glisser (sinon le frottement de la piste annulerait le crochet).
     const dv = ax * this.pasFixe;
     b.corps.velocity.x += dv;
     b.corps.angularVelocity.z -= dv / D.rayonBoule;
@@ -384,9 +407,27 @@ export class MondePhysique {
 
   _suivreQuilles() {
     const D = DIM;
+    const haut = this._hautTmp || (this._hautTmp = new CANNON.Vec3());
+    const resistance = this.lire('resistanceRoulement');
     for (const q of this.quilles) {
       if (!q.active) continue;
       const p = q.corps.position;
+      // Garde-fou contre les pics numériques (quille pincée entre boule et paroi) : une quille ne dépasse
+      // jamais 12 m/s ni 60 rad/s — au-delà de ce qu'un vrai impact produit, et invisible en jeu.
+      const vl = q.corps.velocity.length();
+      if (vl > 12) q.corps.velocity.scale(12 / vl, q.corps.velocity);
+      const wl = q.corps.angularVelocity.length();
+      if (wl > 60) q.corps.angularVelocity.scale(60 / wl, q.corps.angularVelocity);
+      // Résistance au roulement : une quille couchée sur le deck (proche du sol, très inclinée) est freinée
+      // en rotation et en translation, comme le bois sur le bois — sinon elle roule à l'infini au ralenti.
+      if (resistance > 0 && p.y < 0.09) {
+        q.corps.quaternion.vmult(new CANNON.Vec3(0, 1, 0), haut);
+        if (haut.y < 0.5) {
+          const k = Math.exp(-resistance * this.pasFixe);
+          q.corps.angularVelocity.scale(k, q.corps.angularVelocity);
+          q.corps.velocity.x *= k; q.corps.velocity.z *= k;
+        }
+      }
       if (p.y < -0.35 || p.z < -(D.longueurPiste + D.longueurDeck + D.longueurFosse) || p.z > 0) {
         this.world.removeBody(q.corps);
         q.active = false; q.presente = false; q.debout = false;
@@ -400,12 +441,12 @@ export class MondePhysique {
     const dt = Math.min(Math.max(0, dtReel), 0.05);
     this.accumulateur += dt;
     let n = 0;
-    while (this.accumulateur >= this.pasFixe && n < 8) {
+    while (this.accumulateur >= this.pasFixe && n < 16) {
       this._pas();
       this.accumulateur -= this.pasFixe;
       n++;
     }
-    if (n >= 8) this.accumulateur = 0;
+    if (n >= 16) this.accumulateur = 0;
     return n;
   }
 

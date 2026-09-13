@@ -574,6 +574,35 @@ function boucle(maintenant) {
 }
 document.addEventListener('visibilitychange', () => { derniereImage = performance.now(); });
 
+// ---------- Bras du personnage piloté par le téléphone ----------
+
+// Le bras suit la rotation accumulée du téléphone autour de l'axe du balancier depuis la pose du pouce.
+// On intègre la vitesse angulaire (remise à zéro à chaque geste) : indépendant de la façon de tenir le
+// téléphone, et sans dérive sensible sur la seconde que dure un geste.
+function majBrasPersonnage(j, s, p) {
+  if (!s.geste || s.geste.termine) return;
+  if (!p.r || !Number.isFinite(p.r[0]) || !Number.isFinite(p.r[1]) || !Number.isFinite(p.r[2])) return; // pas de gyroscope : animation scriptée
+  const dt = Math.min(0.1, Math.max(0, (p.dt || 16.7) / 1000));
+  // Rotation accumulée depuis la pose du pouce, sur les trois axes du téléphone (°)
+  const acc = s.angleBras || (s.angleBras = [0, 0, 0]);
+  for (let k = 0; k < 3; k++) acc[k] += p.r[k] * dt;
+  // Extrêmes par axe, pour le calibrage (quel axe porte le balancier, dans quel sens, avec quelle amplitude)
+  const ext = s.brasExtremes || (s.brasExtremes = [[0, 0], [0, 0], [0, 0]]);
+  for (let k = 0; k < 3; k++) { ext[k][0] = Math.min(ext[k][0], acc[k]); ext[k][1] = Math.max(ext[k][1], acc[k]); }
+  if (!personnage) return;
+  const jc = match.joueurCourant();
+  const cest_lui = s.calib || (jc && jc.jeton === j.jeton) || !!lire('clavierPourTous');
+  if (!cest_lui) return;
+  const eff = reglagesEffectifs(j);
+  const gain = Number(eff.gainBrasGeste);
+  if (!(gain > 0)) return;
+  const axe = [0, 1, 2].includes(Number(eff.axeBras)) ? Number(eff.axeBras) : 1;
+  const signe = (Number(eff.signeBrasGeste) === -1 ? -1 : 1);
+  const angle = Math.max(-150, Math.min(110, acc[axe] * gain * signe)) * Math.PI / 180;
+  personnage.piloterBras(angle);
+  if (s.calib) hud.majTour({ titre: hud.pTourTitre.textContent, sous: 'bras : ' + Math.round(angle * 180 / Math.PI) + '°' + (angle < -0.2 ? ' (en arrière)' : angle > 0.2 ? ' (devant)' : ''), classe: 'passage' });
+}
+
 // ---------- Sons liés à la physique ----------
 
 const sons = { roulement: false, impact: false, gouttiere: false, yPrec: 0, vyPrec: 0 };
@@ -692,6 +721,7 @@ function gererMessage(j, m) {
     case TYPES.ECHANTILLON: {
       if (typeof m.t !== 'number') return;
       const p = preparerEchantillon(m);
+      majBrasPersonnage(j, s, p);
       s.historique.push(p);
       if (s.historique.length > 900) s.historique.splice(0, s.historique.length - 900);
       s.dernierEch = p;
@@ -707,6 +737,8 @@ function gererMessage(j, m) {
       }
       if (s.timerFin) { clearTimeout(s.timerFin); s.timerFin = null; }
       const p = profils.get(j.jeton);
+      s.angleBras = [0, 0, 0];
+      s.brasExtremes = [[0, 0], [0, 0], [0, 0]];
       if (personnage) personnage.armer(true);
       s.geste = nouveauGeste(m.t, reglagesEffectifs(j), s.dernierEch, p ? p.directionAvant : null);
       s.glisser = null;
@@ -814,10 +846,32 @@ function demarrerCalibration(j) {
 function demarrerCalibrage(j, type) {
   const s = suivis.get(j.jeton);
   if (!s || !ETAPES_CALIB[type]) return;
-  s.calib = s.calib && s.calib.type === type ? null : { type, index: 0, valeurs: {} };
+  s.calib = s.calib && s.calib.type === type ? null : { type, index: 0, valeurs: {}, bras: [] };
   banc.majCarte(j);
   banc.noter(s.calib ? 'Calibrage ' + (type === 'lift' ? 'du lift' : 'de la puissance') + ' de ' + j.nom + ' : ' + ETAPES_CALIB[type].length + ' lancers guidés (le jeu ne lance pas)' : 'Calibrage annulé pour ' + j.nom);
+  if (s.calib) {
+    // Le personnage prend l'apparence du joueur calibré et suivra son bras ; le salon se replie pour le voir
+    if (personnage) personnage.appliquerProfil(profilPersonnage({ nom: j.nom, couleur: j.couleur, jeton: j.jeton, main: j.main, type: 'telephone' }));
+    if (scene) scene.couleurBoule(couleurHex(j.couleur));
+    if (banc.ouvert) banc.basculer(false);
+    if (match.etat === 'salon') salon.replier(true);
+    afficherConsigneCalibrage(j, s);
+  } else finirCalibrage(j, s);
   envoyerEtat(j);
+}
+
+function afficherConsigneCalibrage(j, s) {
+  const c = s.calib;
+  const e = ETAPES_CALIB[c.type][c.index];
+  if (!e) return;
+  hud.majTour({ titre: 'Calibrage ' + (c.index + 1) + '/' + ETAPES_CALIB[c.type].length + ' — ' + e.consigne, sous: e.aide + ' · le personnage suit ton bras', classe: 'passage' });
+}
+
+function finirCalibrage(j, s) {
+  hud.majTour({});
+  if (match.etat === 'salon') salon.replier(false);
+  else majBanniereTour();
+  if (personnage) personnage.repos();
 }
 
 // Refaire l'étape précédente (geste raté).
@@ -826,7 +880,9 @@ function refaireEtapeCalibrage(j) {
   if (!s || !s.calib || s.calib.index === 0) return;
   s.calib.index--;
   delete s.calib.valeurs[ETAPES_CALIB[s.calib.type][s.calib.index].cle];
+  s.calib.bras.pop();
   banc.majCarte(j);
+  afficherConsigneCalibrage(j, s);
   envoyerEtat(j);
 }
 
@@ -838,14 +894,43 @@ function enregistrerEtapeCalibrage(j, s, res) {
   const v = etape.mesure(res);
   if (!Number.isFinite(v)) return;
   c.valeurs[etape.cle] = v;
+  c.bras.push(s.brasExtremes ? s.brasExtremes.map((e) => e.slice()) : null);
   c.index++;
-  if (c.index < etapes.length) { banc.majCarte(j); return; }
+  if (c.index < etapes.length) { banc.majCarte(j); afficherConsigneCalibrage(j, s); return; }
   s.calib = null;
   if (c.type === 'puissance') appliquerCalibragePuissance(j, c.valeurs);
   else appliquerCalibrageLift(j, c.valeurs);
+  appliquerCalibrageBras(j, c.bras);
   envoyerConfig(j);
   banc.redessinerProfils();
   banc.majCarte(j);
+  finirCalibrage(j, s);
+}
+
+// Bras : à partir des rotations accumulées pendant les lancers de calibrage, on retient l'axe du téléphone
+// qui a le plus tourné (c'est celui du balancier), le sens qui met le grand mouvement en arrière, et le gain
+// qui fait atteindre ~110° d'amplitude au personnage. Rien à régler à la main.
+function appliquerCalibrageBras(j, brasParLancer) {
+  const lancers = (brasParLancer || []).filter(Boolean);
+  if (!lancers.length) return;
+  const amplitude = [0, 0, 0], sommeSignee = [0, 0, 0];
+  for (const ext of lancers) for (let k = 0; k < 3; k++) {
+    const amp = ext[k][1] - ext[k][0];
+    amplitude[k] += amp;
+    sommeSignee[k] += Math.abs(ext[k][0]) >= Math.abs(ext[k][1]) ? ext[k][0] : ext[k][1]; // l'extrême dominant, signé
+  }
+  let axe = 0;
+  for (let k = 1; k < 3; k++) if (amplitude[k] > amplitude[axe]) axe = k;
+  const ampMoy = amplitude[axe] / lancers.length;
+  if (ampMoy < 25) { banc.noter('Bras non calibré pour ' + j.nom + ' : rotation trop faible (' + Math.round(ampMoy) + '°) — le gyroscope tourne-t-il ?'); return; }
+  // Le grand mouvement (balancier arrière) doit être négatif à l'écran
+  const signe = sommeSignee[axe] > 0 ? -1 : 1;
+  const gain = Math.round(Math.min(2, Math.max(0.5, 110 / ampMoy)) * 20) / 20;
+  profils.setReglage(j.jeton, 'axeBras', axe);
+  profils.setReglage(j.jeton, 'signeBrasGeste', signe);
+  profils.setReglage(j.jeton, 'gainBrasGeste', gain);
+  const nomsAxes = ['α (autour de l’écran)', 'β (autour de la largeur)', 'γ (autour de la hauteur)'];
+  banc.noter('Bras calibré pour ' + j.nom + ' : axe ' + nomsAxes[axe] + ', amplitude ' + Math.round(ampMoy) + '° → gain ' + gain.toFixed(2).replace('.', ',') + (signe === -1 ? ', sens inversé' : ''));
 }
 
 function appliquerCalibragePuissance(j, v) {

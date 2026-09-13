@@ -1,6 +1,6 @@
 // Constantes partagées entre l'écran (PC) et la manette (téléphone).
 
-export const VERSION = 'V1.3';
+export const VERSION = 'V1.6';
 export const VERSION_PROTOCOLE = 1;
 
 // Identifiant PeerJS de l'écran = PREFIXE_SALLE + code de salle (ex. "bowl-K7M3P").

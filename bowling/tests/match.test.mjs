@@ -5,6 +5,8 @@ import { deciderLancer, cibleX, groupePrincipal, Bot } from '../js/ecran/jeu/bot
 import { Partie } from '../js/ecran/jeu/partie.js';
 import { MondePhysique } from '../js/ecran/jeu/physique.js';
 
+// Tests déterministes : pas d'aléa sur la masse des quilles
+const SANS_ALEA = (id) => (id === 'aleaQuilles' ? 0 : undefined);
 let echecs = 0;
 const verifier = (nom, cond, detail = '') => { console.log((cond ? '  ✓ ' : '  ✗ ') + nom + (cond ? '' : '   ' + detail)); if (!cond) echecs++; };
 
@@ -101,7 +103,7 @@ console.log('Bot');
   verifier('pro : effet ≈ 0,3 sans bruit (gaussien nul)', Math.abs(deciderLancer('pro', null, () => 0.25).effet - 0.3) < 0.01, String(deciderLancer('pro', null, () => 0.25).effet));
 
   // Déroulé du bot dans une vraie partie
-  const phys = new MondePhysique();
+  const phys = new MondePhysique(SANS_ALEA);
   const partie = new Partie(phys, () => undefined);
   const bot = new Bot(partie, (id) => (id === 'delaiBot' ? 0.5 : undefined));
   let lance = null;

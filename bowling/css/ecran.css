@@ -228,3 +228,7 @@ button.principal:disabled { opacity: .45; cursor: default; }
 .hud-entrainement .rack { color: var(--sourd); font-size: .8em; }
 .fin-lancers { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .fin-lancer { background: #1a1e2b; border-radius: 6px; padding: 4px 8px; font-size: 13px; } .fin-lancer.ok { background: #173b27; color: #7ee2a2; }
+
+.salon.replie { background: transparent; pointer-events: none; align-items: flex-start; }
+.salon.replie .salon-carte { display: none; }
+.salon-replie { pointer-events: auto; margin-top: 8px; background: #3b2a12dd; color: #ffd54a; border-radius: 999px; padding: 6px 16px; font-size: 14px; }
