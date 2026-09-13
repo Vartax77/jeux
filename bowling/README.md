@@ -14,6 +14,13 @@ Jeu de bowling façon Wii Sports : la partie se joue sur l'écran du PC, les iPh
 - **Réglages** (Échap) : 9 groupes, ~90 réglages, export/import JSON ; **banc de calibrage** (C) du lot 1 toujours là.
 - **PWA** : écran et manette installables ; pages et bibliothèques en cache (la mise en relation reste en ligne).
 
+## 1 bis. Journal des versions
+
+- **V1.3** : calibrage guidé et raccourci — puissance en **3 lancers** (lent / normal / fort) au lieu de 6, le lancer normal calant en plus la courbe de la jauge ; nouveau **calibrage du lift** en 2 lancers (poignet droit / poignet tourné) ; bouton « Refaire ce lancer » ; nouveau réglage `courbePuissance` (par joueur).
+- **V1.2** (deuxième passe visuelle, d'après tes captures) : parois du deck ramenées de 70 à 35 cm et limitées au deck (elles remplissaient l'écran depuis l'approche) ; entraxe des pistes voisines porté de 1,83 à 2,35 m ; masque au-dessus des quilles descendu jusqu'au plafond pour cacher la machine ; pinsetter au repos remonté derrière ce masque (il flottait au-dessus des quilles) ; spot sur le deck pour détacher les quilles du fond ; quilles plus brillantes, repères de placement sur le deck ; gouttière et fosse resserrées et assombries ; retours de boules reculés.
+- **V1.1** (après le premier test réel) : caméra d'impact **derrière la boule** par défaut (l'ancienne vue de côté était placée derrière les parois de la piste voisine ; elle reste disponible, repositionnée, dans Réglages → Caméras) ; gouttières en chenal creux et bords fins ; pinsetter qui **soulève** les quilles debout et **pousse** les couchées avant que la physique ne les retire ; **calibrage de la puissance par joueur** dans le banc (3 lancers doux + 3 forts → `aMin`/`aMax` du profil), plafond par défaut relevé de 22 à 32 m/s² ; crochet dépendant de la vitesse (boule lente = 30 % de plus, boule à fond = 30 % de moins) ; aléa de masse ±10 % sur les quilles et rebond quille/quille 0,7 pour une action de quilles jamais identique.
+- **V1** : lots 1 à 5.
+
 ## 2. Mise en ligne (GitHub Pages)
 
 Les capteurs de l'iPhone exigent une page en **HTTPS** : la manette doit être servie en ligne. GitHub Pages le fait gratuitement.
@@ -72,6 +79,14 @@ Pour tester seul avec un téléphone et le clavier : coche « Le clavier peut la
 - **L** : le prochain lancer sera lobé ; **B** : en arrière (gags du cahier des charges, pour les vérifier sans téléphone).
 - **Espace** ou **Entrée** hors préparation : passer la cinématique (roulement compris : la simulation se termine instantanément et compte).
 - **V** : caméra libre (souris pour tourner, molette pour zoomer, V pour revenir). **F** : plein écran. **H** : aide. **C** : banc. **Échap** : réglages.
+
+### Calibrer un joueur (puissance et lift)
+Banc (C) → carte du joueur. Pendant un calibrage, les gestes du joueur ne lancent pas de boule et sont acceptés hors tour ; **« Refaire ce lancer »** annule l'étape précédente si le geste est raté.
+
+- **« Calibrer la puissance (3 lancers) »** : le téléphone guide — *lance LENTEMENT*, *lance NORMALEMENT*, *lance FORT*. Le lent fixe `aMin` (85 % de son pic), le fort fixe `aMax` (105 %), et le **normal cale la courbe de la jauge** (`courbePuissance`) pour que ton geste habituel tombe à 50 % au lieu de saturer à 100 %.
+- **« Calibrer le lift (2 lancers) »** : *lance POIGNET DROIT*, puis *lance en TOURNANT LE POIGNET*. Le premier fixe la zone morte (125 % de la torsion résiduelle : un geste droit donne bien une boule droite), le second le plein effet (90 % de ton amplitude maximale : ton lift maximal donne bien un crochet plein).
+
+Les valeurs obtenues sont dans « Réglages personnels » de la carte, modifiables à la main, et résumées sous les boutons. À refaire après un changement de main, de téléphone ou de façon de lancer.
 
 ### Au téléphone
 Même connexion qu'au lot 1 (QR ou code). À son tour, la zone affiche LANCER ; le geste est analysé comme au lot 1 (puissance, effet, phase), la boule prend la couleur du joueur et part avec la visée courante (◀ ▶ du téléphone ou clavier). Le banc (C) continue de tout tracer et journaliser, avec le nombre de quilles tombées.

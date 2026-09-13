@@ -66,9 +66,18 @@ export class Cameras {
         break;
       }
       case 'impact': {
-        const s = ctx.cote || 1;
-        p.set(s * 2.3, 0.55, -L + 1.0);
-        r.set(0, 0.3, -L - 0.35);
+        const plan = this.lire('planImpact', 'derriere');
+        if (plan === 'cote') {
+          // Vue de côté, au-dessus des parois du deck (elles font 0,7 m), sur le côté de la piste
+          const s = ctx.cote || 1;
+          p.set(s * 1.6, 1.55, -L + 2.4);
+          r.set(0, 0.3, -L - 0.35);
+        } else {
+          // Derrière la boule, arrêtée à 4,5 m des quilles : on voit l'impact de face
+          const b = ctx.boule || { x: 0 };
+          p.set(b.x * 0.35, 1.7, -L + 4.6);
+          r.set(0, 0.35, -L - 0.45);
+        }
         break;
       }
       case 'resultat':

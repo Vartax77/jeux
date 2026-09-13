@@ -46,9 +46,9 @@ const DEFAUTS = {
   vMin: 4, vMax: 9, gainEffet: 2.5, debutCrochet: 60, vitesseLob: 2.5, perteLob: 0.35,
   masseBoule: 6.8, masseQuille: 1.2, frottementPiste: 0.04, rebondPiste: 0.05,
   frottementQuille: 0.2, rebondQuille: 0.35, frottementBouleQuille: 0.1, rebondBouleQuille: 0.4,
-  frottementQuilleQuille: 0.1, rebondQuilleQuille: 0.6, rebondKickback: 0.6,
+  frottementQuilleQuille: 0.1, rebondQuilleQuille: 0.7, rebondKickback: 0.6,
   amortissementQuille: 0.2, delaiMaxQuilles: 4, seuilChute: 40, deplacementChute: 0.3, glisseInitiale: 0.9,
-  gouttieresFermees: false, formeQuille: 'spheres', inertieQuille: 1,
+  gouttieresFermees: false, formeQuille: 'spheres', inertieQuille: 1, aleaQuilles: 0.1,
 };
 
 export class MondePhysique {
@@ -209,6 +209,10 @@ export class MondePhysique {
   // ---------- Quilles ----------
 
   _poserQuille(q) {
+    // Aléa de masse (±aleaQuilles) : deux impacts identiques ne donnent jamais exactement la même chute
+    const alea = this.lire('aleaQuilles');
+    q.corps.mass = this.lire('masseQuille') * (1 + (alea ? (Math.random() * 2 - 1) * alea : 0));
+    this._appliquerInertie(q.corps);
     q.corps.position.set(q.initiale.x, DIM.centreGraviteQuille, q.initiale.z);
     q.corps.quaternion.set(0, 0, 0, 1);
     q.corps.velocity.set(0, 0, 0);
@@ -351,7 +355,9 @@ export class MondePhysique {
     const debut = this.lire('debutCrochet') / 100;
     if (progression <= debut) return;
     const t = (progression - debut) / Math.max(0.05, 1 - debut);
-    const ax = b.lance.effet * this.lire('gainEffet') * t * t;
+    // Une boule lente crochète plus qu'une boule rapide (moins de temps de glisse sur le sec) : facteur 1,3 → 0,7 selon la puissance.
+    const facteurVitesse = 1.3 - 0.6 * b.lance.puissance;
+    const ax = b.lance.effet * this.lire('gainEffet') * facteurVitesse * t * t;
     // Nudge de vitesse latérale + rotation de roulement cohérente : la boule « roule » sur sa nouvelle trajectoire
     // au lieu de glisser (sinon le frottement de la piste annulerait l'effet).
     const dv = ax * this.pasFixe;

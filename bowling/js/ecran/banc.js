@@ -90,6 +90,11 @@ export class Banc {
         el('button', { class: 'secondaire btn-calib', type: 'button', onclick: () => this.demarrerCalibration(j) }, 'Calibrer le sens avant (3 lancers)'),
         el('span', { class: 'calib-etat' }),
         el('button', { class: 'secondaire btn-calib-oubli', type: 'button', onclick: () => { this.profils.setDirection(j.jeton, null); const s = this.suivis.get(j.jeton); if (s) s.calibration = null; this.majCarte(j); } }, 'Oublier')),
+      el('div', { class: 'carte-ligne calib-puissance' },
+        el('button', { class: 'secondaire btn-calib-puissance', type: 'button', onclick: () => this.demarrerCalibrage(j, 'puissance') }, 'Calibrer la puissance (3 lancers)'),
+        el('button', { class: 'secondaire btn-calib-lift', type: 'button', onclick: () => this.demarrerCalibrage(j, 'lift') }, 'Calibrer le lift (2 lancers)'),
+        el('button', { class: 'secondaire btn-calib-refaire cache', type: 'button', onclick: () => this.refaireEtapeCalibrage(j) }, 'Refaire ce lancer'),
+        el('span', { class: 'calib-puissance-etat' })),
       el('details', { class: 'perso' }, el('summary', {}, 'Réglages personnels'), el('div', { class: 'champs-profil' })),
     );
     carte.querySelector('.actif').checked = !!j.actif;
@@ -132,6 +137,19 @@ export class Banc {
     if (s) {
       const r = s.dernierResultat;
       c.querySelector('.resultat').textContent = r ? 'Dernier lancer : ' + this.resumeResultat(r) : 'Dernier lancer : —';
+      const cp = c.querySelector('.calib-puissance-etat');
+      const eff = this.reglagesEffectifs(j);
+      const etapes = s.calib ? this.ETAPES_CALIB[s.calib.type] : null;
+      c.querySelector('.btn-calib-refaire').classList.toggle('cache', !(s.calib && s.calib.index > 0));
+      c.querySelector('.btn-calib-puissance').textContent = s.calib && s.calib.type === 'puissance' ? 'Annuler le calibrage' : 'Calibrer la puissance (3 lancers)';
+      c.querySelector('.btn-calib-lift').textContent = s.calib && s.calib.type === 'lift' ? 'Annuler le calibrage' : 'Calibrer le lift (2 lancers)';
+      if (s.calib && etapes && etapes[s.calib.index]) cp.textContent = (s.calib.index + 1) + '/' + etapes.length + ' — ' + etapes[s.calib.index].consigne + ' (' + etapes[s.calib.index].aide + ')';
+      else {
+        const perso = p && p.reglages ? p.reglages : {};
+        const puiss = perso.aMax ? 'puissance ' + eff.aMin + '→' + eff.aMax + ' m/s², courbe ' + Number(eff.courbePuissance || 1).toFixed(2).replace('.', ',') : 'puissance par défaut (' + eff.aMin + '→' + eff.aMax + ')';
+        const lift = perso.effetAnglePlein ? 'lift ' + eff.effetZoneMorte + '→' + eff.effetAnglePlein + '°' : 'lift par défaut (' + eff.effetZoneMorte + '→' + eff.effetAnglePlein + '°)';
+        cp.textContent = puiss + ' · ' + lift;
+      }
       const calib = c.querySelector('.calib-etat');
       if (s.calibration) calib.textContent = 'en cours : ' + s.calibration.vecteurs.length + '/3 lancers';
       else if (p && p.directionAvant) calib.textContent = 'sens avant calibré ✓';

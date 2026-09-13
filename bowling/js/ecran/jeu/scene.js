@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from '../../../lib/three/RoomEnvironment.js';
 import { DIM, positionsQuilles } from './physique.js';
 
-const PAS_PISTES = 1.83; // entraxe des pistes voisines (décor)
+const PAS_PISTES = 2.35; // entraxe des pistes voisines (décor) : assez large pour ne pas former un couloir
 
 export function creerRenderer(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -159,9 +159,18 @@ export class Scene3D {
     soleil.shadow.normalBias = 0.02;
     this.scene.add(soleil, soleil.target);
     this.soleil = soleil;
-    const appoint = new THREE.DirectionalLight(0xdfe8ff, 0.45);
+    const appoint = new THREE.DirectionalLight(0xdfe8ff, 0.4);
     appoint.position.set(-4, 6, 4);
     this.scene.add(appoint);
+    // Spot sur le deck : les quilles se détachent du fond au lieu de s'y fondre
+    const spot = new THREE.SpotLight(0xfff4e0, 26, 9, Math.PI / 7, 0.45, 1.6);
+    spot.position.set(0, 3.2, -DIM.longueurPiste + 2.2);
+    spot.target.position.set(0, 0.2, -DIM.longueurPiste - 0.3);
+    spot.castShadow = true;
+    spot.shadow.mapSize.set(1024, 1024);
+    spot.shadow.bias = -0.0006;
+    this.scene.add(spot, spot.target);
+    this.spotDeck = spot;
   }
 
   _salle() {
@@ -202,17 +211,19 @@ export class Scene3D {
 
     // Panneau au-dessus des quilles (masque de la machine) avec le nom du bowling
     const nom = String(this.lire('nomBowling', 'BOWLING') || 'BOWLING').toUpperCase().slice(0, 18);
-    const panneau = new THREE.Mesh(new THREE.BoxGeometry(largeurSalle - 1, 1.25, 0.4), mat('#1f3b8f', { roughness: 0.6 }));
-    panneau.position.set(0, 1.55, -(D.longueurPiste + D.longueurDeck) - 0.35);
+    // Masque : du plafond jusqu'à 60 cm au-dessus des quilles, il cache la machine et porte l'enseigne
+    const hauteurMasque = 3.4 - 0.95;
+    const panneau = new THREE.Mesh(new THREE.BoxGeometry(largeurSalle - 1, hauteurMasque, 0.4), mat('#1f3b8f', { roughness: 0.6 }));
+    panneau.position.set(0, 0.95 + hauteurMasque / 2, -(D.longueurPiste + D.longueurDeck) - 0.35);
     this.scene.add(panneau);
     this.enseigne = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.05), new THREE.MeshStandardMaterial({ map: textureTexte(nom), emissive: '#ffffff', emissiveMap: textureTexte(nom, { fond: '#000000', couleur: '#ffffff' }), emissiveIntensity: 0.9, roughness: 0.5 }));
-    this.enseigne.position.set(0, 1.55, -(D.longueurPiste + D.longueurDeck) - 0.14);
+    this.enseigne.position.set(0, 1.75, -(D.longueurPiste + D.longueurDeck) - 0.14);
     this.scene.add(this.enseigne);
-    const liseret = new THREE.Mesh(new THREE.BoxGeometry(largeurSalle - 1, 0.08, 0.42), new THREE.MeshStandardMaterial({ color: '#f2c94c', emissive: '#f2c94c', emissiveIntensity: 0.6, roughness: 0.5 }));
-    liseret.position.set(0, 0.9, -(D.longueurPiste + D.longueurDeck) - 0.35);
+    const liseret = new THREE.Mesh(new THREE.BoxGeometry(largeurSalle - 1, 0.06, 0.44), new THREE.MeshStandardMaterial({ color: '#f2c94c', emissive: '#f2c94c', emissiveIntensity: 0.6, roughness: 0.5 }));
+    liseret.position.set(0, 0.95, -(D.longueurPiste + D.longueurDeck) - 0.35);
     this.scene.add(liseret);
     // Fosse noire (ouverture sous le panneau)
-    const fosse = new THREE.Mesh(new THREE.BoxGeometry(largeurSalle - 1, 0.9, D.longueurFosse + 0.4), mat('#0a0b0f'));
+    const fosse = new THREE.Mesh(new THREE.BoxGeometry(D.largeurPiste + 2 * D.largeurGouttiere + 0.2, 0.9, D.longueurFosse + 0.4), mat('#07080b'));
     fosse.position.set(0, 0.45 - D.profondeurFosse, -(D.longueurPiste + D.longueurDeck) - D.longueurFosse / 2);
     this.scene.add(fosse);
   }
@@ -223,10 +234,10 @@ export class Scene3D {
     const mapBois = textureBoisPiste(longueurPiste);
     const matBois = new THREE.MeshStandardMaterial({ map: mapBois, roughness: 0.28, metalness: 0.02, envMapIntensity: 0.8 });
     const matApproche = new THREE.MeshStandardMaterial({ color: '#c9ab7c', roughness: 0.7 });
-    const matGouttiere = new THREE.MeshStandardMaterial({ color: '#2c2f38', roughness: 0.55, metalness: 0.2 });
-    const matBord = new THREE.MeshStandardMaterial({ color: '#8a6a4a', roughness: 0.8 });
-    const matKickback = new THREE.MeshStandardMaterial({ color: '#3c4150', roughness: 0.6, metalness: 0.1 });
-    const matQuilleDecor = new THREE.MeshStandardMaterial({ map: textureQuille(), roughness: 0.4 });
+    const matGouttiere = new THREE.MeshStandardMaterial({ color: '#555b6a', roughness: 0.45, metalness: 0.25, side: THREE.DoubleSide });
+    const matBord = new THREE.MeshStandardMaterial({ color: '#b08a5a', roughness: 0.7 });
+    const matKickback = new THREE.MeshStandardMaterial({ color: '#21242e', roughness: 0.7, metalness: 0.1 });
+    const matQuilleDecor = new THREE.MeshStandardMaterial({ map: textureQuille(), roughness: 0.22, metalness: 0.02, envMapIntensity: 1.1 });
     const geoQuille = geometrieQuille();
 
     this.pistes = new THREE.Group();
@@ -251,27 +262,35 @@ export class Scene3D {
 
       for (const s of [-1, 1]) {
         const xg = D.largeurPiste / 2 + D.largeurGouttiere / 2;
-        const g = new THREE.Mesh(new THREE.BoxGeometry(D.largeurGouttiere, 0.1, longueurPiste), matGouttiere);
-        g.position.set(s * xg, -D.profondeurGouttiere - 0.05, -longueurPiste / 2);
+        // Gouttière : chenal creux (demi-tube), fond à la profondeur physique
+        const rayonG = D.largeurGouttiere / 2;
+        const geoG = new THREE.CylinderGeometry(rayonG, rayonG, longueurPiste, 20, 1, true, 0, Math.PI);
+        geoG.rotateX(Math.PI / 2);
+        geoG.rotateZ(-Math.PI / 2);
+        const g = new THREE.Mesh(geoG, matGouttiere);
+        g.position.set(s * xg, rayonG - D.profondeurGouttiere, -longueurPiste / 2);
         g.receiveShadow = true;
         grp.add(g);
-        const bord = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, longueurPiste), matBord);
-        bord.position.set(s * (D.largeurPiste / 2 + D.largeurGouttiere + 0.03), -0.02, -longueurPiste / 2);
+        // Bord extérieur fin (capping) au niveau de la piste
+        const bord = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, longueurPiste), matBord);
+        bord.position.set(s * (D.largeurPiste / 2 + D.largeurGouttiere + 0.025), 0.0, -longueurPiste / 2);
         grp.add(bord);
-        const kick = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.7, D.longueurDeck + D.longueurFosse + 0.6), matKickback);
-        kick.position.set(s * (D.largeurPiste / 2 + D.largeurGouttiere + 0.03), 0.35, -(D.longueurPiste - 0.3) - (D.longueurDeck + D.longueurFosse + 0.6) / 2);
+        // Paroi du deck : basse (35 cm) et limitée au deck, pour ne pas masquer les quilles depuis l'approche
+        const longueurKick = D.longueurDeck + 0.6;
+        const kick = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.35, longueurKick), matKickback);
+        kick.position.set(s * (D.largeurPiste / 2 + D.largeurGouttiere + 0.03), 0.175, -(D.longueurPiste - 0.3) - longueurKick / 2);
         grp.add(kick);
       }
 
       // Retour de boules (entre deux pistes), avec deux boules décoratives
       if (k === -2 || k === 0) {
-        const retour = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.55, 1.5), new THREE.MeshStandardMaterial({ color: '#2f3340', roughness: 0.5, metalness: 0.2 }));
-        retour.position.set(PAS_PISTES / 2, 0.27, 2.2);
+        const retour = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.4, 1.3), new THREE.MeshStandardMaterial({ color: '#2f3340', roughness: 0.5, metalness: 0.2 }));
+        retour.position.set(PAS_PISTES / 2, 0.2, 2.6);
         retour.castShadow = true;
         grp.add(retour);
         for (const [dz, col] of [[-0.35, '#f28c28'], [0.15, '#8e44ad']]) {
           const b = new THREE.Mesh(new THREE.SphereGeometry(D.rayonBoule, 24, 16), new THREE.MeshStandardMaterial({ color: col, roughness: 0.25 }));
-          b.position.set(PAS_PISTES / 2, 0.55 + D.rayonBoule, 2.2 + dz);
+          b.position.set(PAS_PISTES / 2, 0.4 + D.rayonBoule, 2.6 + dz);
           grp.add(b);
         }
       }
@@ -298,6 +317,14 @@ export class Scene3D {
   }
 
   _quilles() {
+    // Repères de placement sur le deck : les quilles ne flottent pas dans le vide visuellement
+    const matRepere = new THREE.MeshStandardMaterial({ color: '#6b5336', roughness: 0.9 });
+    for (const p of positionsQuilles(this.rangs)) {
+      const r = new THREE.Mesh(new THREE.CircleGeometry(0.035, 16), matRepere);
+      r.rotation.x = -Math.PI / 2;
+      r.position.set(p.x, 0.003, p.z);
+      this.scene.add(r);
+    }
     this.quilles = positionsQuilles(this.rangs).map((p) => {
       const m = new THREE.Mesh(this.geoQuille, this.matQuille);
       m.castShadow = true;
@@ -330,7 +357,7 @@ export class Scene3D {
     const D = DIM;
     const mat = new THREE.MeshStandardMaterial({ color: '#4a5060', roughness: 0.5, metalness: 0.3 });
     this.balayeuse = new THREE.Mesh(new THREE.BoxGeometry(D.largeurPiste + 0.16, 0.09, 0.05), mat);
-    this.balayeuse.position.set(0, 0.6, -D.longueurPiste + 0.4);
+    this.balayeuse.position.set(0, 1.2, -D.longueurPiste + 0.4);
     this.balayeuse.castShadow = true;
     this.scene.add(this.balayeuse);
     this.rack = new THREE.Group();
@@ -341,7 +368,7 @@ export class Scene3D {
       doigt.position.set(p.x, -0.13, p.z + D.longueurPiste + 0.4);
       this.rack.add(doigt);
     }
-    this.rack.position.set(0, 1.0, -D.longueurPiste - 0.4);
+    this.rack.position.set(0, 1.45, -D.longueurPiste - 0.4);
     this.scene.add(this.rack);
     this.animerRemise(0, 'rack');
   }
@@ -370,6 +397,7 @@ export class Scene3D {
     if (this.renderer.shadowMap.enabled !== ombres) { this.renderer.shadowMap.enabled = ombres; this.renderer.shadowMap.needsUpdate = true; }
     this.soleil.castShadow = ombres;
     this.soleil.shadow.mapSize.set(q === 'haute' ? 4096 : 2048, q === 'haute' ? 4096 : 2048);
+    if (this.spotDeck) this.spotDeck.castShadow = ombres;
     this.camera.fov = this.lire('champVision', 50);
     this.camera.updateProjectionMatrix();
   }
@@ -417,7 +445,8 @@ export class Scene3D {
     this.matBoule.needsUpdate = true;
   }
 
-  // Copie l'état physique vers les maillages.
+  // Copie l'état physique vers les maillages. Pendant la remise en place, les quilles debout montent avec le rack
+  // et les quilles couchées sont poussées par la barre (visuel seulement : la physique est appliquée après le balayage).
   synchroniser(phys) {
     const b = phys.boule;
     if (b.enJeu) {
@@ -425,12 +454,17 @@ export class Scene3D {
       this.boule.position.copy(b.corps.position);
       this.boule.quaternion.copy(b.corps.quaternion);
     }
+    const r = this.remise || { p: 0, mode: 'rack', levee: 0, zBarre: null };
     for (const q of phys.quilles) {
       const m = this.quilles[q.index];
       m.visible = q.presente;
       if (!q.presente) continue;
       m.position.copy(q.corps.position);
       m.quaternion.copy(q.corps.quaternion);
+      if (r.p > 0) {
+        if (q.debout) m.position.y += r.levee;
+        else if (r.zBarre != null && m.position.z > r.zBarre - 0.08) m.position.z = r.zBarre - 0.08;
+      }
     }
   }
 
@@ -455,18 +489,31 @@ export class Scene3D {
     const D = DIM;
     const zBas = -D.longueurPiste + 0.45, zHaut = -(D.longueurPiste + D.longueurDeck);
     const lisse = (t) => Math.max(0, Math.min(1, t)) ** 2 * (3 - 2 * Math.max(0, Math.min(1, t)));
-    let yBar = 0.6, zBar = zBas, yRack = 1.0;
+    const Y_RACK_REPOS = 1.45, Y_BARRE_REPOS = 1.2;
+    let yBar = Y_BARRE_REPOS, zBar = zBas, yRack = Y_RACK_REPOS, levee = 0, zBarre = null;
     if (mode === 'respot') {
-      yRack = 1.0 - 0.58 * lisse(p / 0.3) + 0.58 * lisse((p - 0.85) / 0.15);
-      yBar = 0.6 - 0.48 * lisse((p - 0.3) / 0.15) + 0.48 * lisse((p - 0.75) / 0.1);
-      zBar = zBas + (zHaut - zBas) * lisse((p - 0.45) / 0.3) - (zHaut - zBas) * lisse((p - 0.85) / 0.15);
+      // Le rack descend (0–0,3), saisit les quilles debout et les soulève (0,3–0,45) ; la barre balaie (0,45–0,75) ;
+      // la physique retire les couchées à 0,78 ; le rack repose les quilles (0,85–1)
+      const descente = lisse(p / 0.3), remontee = lisse((p - 0.3) / 0.15), repose = lisse((p - 0.85) / 0.15);
+      yRack = Y_RACK_REPOS - 1.03 * descente + 0.35 * remontee - 0.35 * repose;
+      levee = 0.35 * remontee - 0.35 * repose;
+      yBar = Y_BARRE_REPOS - 1.08 * lisse((p - 0.3) / 0.15) + 1.08 * lisse((p - 0.75) / 0.1);
+      const balayage = lisse((p - 0.45) / 0.3);
+      zBar = zBas + (zHaut - zBas) * balayage - (zHaut - zBas) * lisse((p - 0.85) / 0.15);
+      if (p > 0.45 && p < 0.78) zBarre = zBar;
     } else {
-      yBar = 0.6 - 0.48 * lisse(p / 0.12) + 0.48 * lisse((p - 0.5) / 0.1);
-      zBar = zBas + (zHaut - zBas) * lisse((p - 0.12) / 0.33) - (zHaut - zBas) * lisse((p - 0.6) / 0.15);
-      yRack = 1.0 - 0.58 * lisse((p - 0.55) / 0.25) + 0.58 * lisse((p - 0.85) / 0.15);
+      // La barre balaie tout (0–0,45) ; la physique pose le rack complet à 0,5 ; le rack descend avec les quilles (0,55–0,85)
+      yBar = Y_BARRE_REPOS - 1.08 * lisse(p / 0.12) + 1.08 * lisse((p - 0.45) / 0.1);
+      const balayage = lisse((p - 0.12) / 0.33);
+      zBar = zBas + (zHaut - zBas) * balayage - (zHaut - zBas) * lisse((p - 0.6) / 0.15);
+      if (p > 0.12 && p < 0.5) zBarre = zBar;
+      const descente = lisse((p - 0.55) / 0.3);
+      yRack = Y_RACK_REPOS - 1.03 * descente + 1.03 * lisse((p - 0.88) / 0.12);
+      levee = p >= 0.5 ? 0.42 * (1 - descente) : 0;
     }
     this.balayeuse.position.set(0, yBar, zBar);
     this.rack.position.y = yRack;
+    this.remise = p > 0 ? { p, mode, levee, zBarre } : null;
   }
 
   rendre() {

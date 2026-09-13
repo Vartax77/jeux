@@ -30,6 +30,20 @@ import { statistiques } from './jeu/score.js';
 import qrcode from '../../lib/qrcode-generator.js';
 
 const $ = (id) => document.getElementById(id);
+
+// Étapes de calibrage : une consigne, un lancer. `mesure` extrait la grandeur retenue du résultat du geste.
+const ETAPES_CALIB = {
+  puissance: [
+    { cle: 'lent', consigne: 'lance LENTEMENT', aide: 'un lancer tranquille, comme pour viser un spare', mesure: (r) => r.picA },
+    { cle: 'moyen', consigne: 'lance NORMALEMENT', aide: 'ton geste habituel', mesure: (r) => r.picA },
+    { cle: 'fort', consigne: 'lance FORT', aide: 'à pleine puissance, sans te faire mal', mesure: (r) => r.picA },
+  ],
+  lift: [
+    { cle: 'droit', consigne: 'lance POIGNET DROIT', aide: 'sans tourner la main : boule droite', mesure: (r) => Math.abs(r.torsion || 0) },
+    { cle: 'tourne', consigne: 'lance en TOURNANT LE POIGNET', aide: 'ton lift maximal, comme pour un gros crochet', mesure: (r) => Math.abs(r.torsion || 0) },
+  ],
+};
+
 const reglages = new Reglages();
 const lire = (id) => reglages.get(id);
 const profils = new Profils();
@@ -77,6 +91,13 @@ function manetteDuJoueurCourant(jm) {
 }
 
 function etatPour(jm, message = '') {
+  const sv = suivis.get(jm.jeton);
+  if (sv && sv.calib) {
+    const c = sv.calib;
+    const e = ETAPES_CALIB[c.type][c.index];
+    const texte = e ? 'Calibrage ' + (c.index + 1) + '/' + ETAPES_CALIB[c.type].length + ' : ' + e.consigne : 'Calibrage terminé';
+    return { tonTour: !!jm.actif, phase: 'preparation', joueur: jm.nom, passe: '', premier: false, position: partie.visee.position, angle: partie.visee.angle, latence: jm.latence == null ? null : Math.round(jm.latence), message: texte };
+  }
   const phase = phaseManettePour(jm);
   const jc = match.joueurCourant();
   const passe = phase === 'preparation' && attentePassage ? jc.nom : '';
@@ -167,7 +188,7 @@ partie.addEventListener('phase', (e) => {
   // Hors préparation, le HUD garde le nom du lanceur (le match a déjà pu passer au joueur suivant).
   const nom = phase === 'preparation' ? (jc ? jc.nom : '') : (partie.lance ? partie.lance.nom : (jc ? jc.nom : ''));
   hud.majEtat({ phase, boule, frame, debout: partie.debout, joueur: nom });
-  if (cameras) cameras.definir(PLAN_PAR_PHASE[phase] || 'preparation', contexteCamera(), phase === 'impact');
+  if (cameras) cameras.definir(PLAN_PAR_PHASE[phase] || 'preparation', contexteCamera(), phase === 'impact' && lire('planImpact') === 'cote');
   if (phase !== 'preparation') { hud.majTour({}); envoyerEtatATous(); }
 });
 partie.addEventListener('lancer', (e) => {
@@ -578,7 +599,7 @@ function suivreSons() {
 // ---------- Salle ----------
 
 const salle = new Salle({ serveur: reglages.get('serveurSignalisation') || '', delaiOubliMin: reglages.get('delaiPlace') || DELAI_OUBLI_PLACE_MIN });
-const banc = new Banc({ salle, profils, reglages, suivis, reglagesEffectifs, envoyerEtat, envoyerConfig, demarrerCalibration });
+const banc = new Banc({ salle, profils, reglages, suivis, reglagesEffectifs, envoyerEtat, envoyerConfig, demarrerCalibration, demarrerCalibrage, refaireEtapeCalibrage, ETAPES_CALIB });
 const salon = new Salon($('salon'), {
   match: () => match, salle, lire, regler: (id, v) => { reglages.set(id, v); apresChangementReglages(); },
   commencer: demarrerPartie, reprendre: reprendrePartie, effacerSauvegarde: effacerPartie,
@@ -679,7 +700,7 @@ function gererMessage(j, m) {
     }
     case TYPES.POSE: {
       if (typeof m.t !== 'number') return;
-      if (!j.actif || !lancerAutorise('telephone', j.jeton)) {
+      if (!j.actif || (!lancerAutorise('telephone', j.jeton) && !s.calib)) {
         salle.envoyer(j, { type: TYPES.RESULTAT, resultat: 'refuse', raison: 'pasTonTour' });
         banc.journaliser(j, { type: 'refuse', raison: 'pasTonTour', mode: reglagesEffectifs(j).modeLancer, instant: m.t });
         return;
@@ -754,6 +775,17 @@ function finaliserLancer(j, s, tLeve) {
   }
   if (res.type === 'lancer') profils.compterLancer(j.jeton);
 
+  // Calibrage guidé (puissance : lent / moyen / fort ; lift : poignet droit / tourné). Le jeu ne lance pas.
+  if (s.calib && res.type !== 'refuse') {
+    enregistrerEtapeCalibrage(j, s, res);
+    salle.envoyer(j, { type: TYPES.RESULTAT, resultat: 'lancer', puissance: res.puissance, effet: res.effet, phase: res.phase });
+    banc.journaliser(j, { ...res, mode: 'calibrage' });
+    banc.majCarte(j);
+    banc.afficherDernier(j, res);
+    envoyerEtat(j);
+    return;
+  }
+
   // Le lancer part dans le jeu si c'est bien le tour d'un joueur porté par ce téléphone.
   if (res.type === 'lancer') {
     const jc = match.joueurCourant();
@@ -777,6 +809,70 @@ function demarrerCalibration(j) {
   s.calibration = { vecteurs: [] };
   banc.majCarte(j);
   envoyerEtat(j, 'Calibrage : 3 lancers normaux');
+}
+
+function demarrerCalibrage(j, type) {
+  const s = suivis.get(j.jeton);
+  if (!s || !ETAPES_CALIB[type]) return;
+  s.calib = s.calib && s.calib.type === type ? null : { type, index: 0, valeurs: {} };
+  banc.majCarte(j);
+  banc.noter(s.calib ? 'Calibrage ' + (type === 'lift' ? 'du lift' : 'de la puissance') + ' de ' + j.nom + ' : ' + ETAPES_CALIB[type].length + ' lancers guidés (le jeu ne lance pas)' : 'Calibrage annulé pour ' + j.nom);
+  envoyerEtat(j);
+}
+
+// Refaire l'étape précédente (geste raté).
+function refaireEtapeCalibrage(j) {
+  const s = suivis.get(j.jeton);
+  if (!s || !s.calib || s.calib.index === 0) return;
+  s.calib.index--;
+  delete s.calib.valeurs[ETAPES_CALIB[s.calib.type][s.calib.index].cle];
+  banc.majCarte(j);
+  envoyerEtat(j);
+}
+
+function enregistrerEtapeCalibrage(j, s, res) {
+  const c = s.calib;
+  const etapes = ETAPES_CALIB[c.type];
+  const etape = etapes[c.index];
+  if (!etape) return;
+  const v = etape.mesure(res);
+  if (!Number.isFinite(v)) return;
+  c.valeurs[etape.cle] = v;
+  c.index++;
+  if (c.index < etapes.length) { banc.majCarte(j); return; }
+  s.calib = null;
+  if (c.type === 'puissance') appliquerCalibragePuissance(j, c.valeurs);
+  else appliquerCalibrageLift(j, c.valeurs);
+  envoyerConfig(j);
+  banc.redessinerProfils();
+  banc.majCarte(j);
+}
+
+function appliquerCalibragePuissance(j, v) {
+  let aMin = Math.max(1, Math.round(v.lent * 0.85));
+  let aMax = Math.round(v.fort * 1.05);
+  if (aMax < aMin + 6) aMax = aMin + 6;
+  // Le lancer « moyen » doit tomber à 50 % de la jauge : on cherche l'exposant qui l'y place.
+  const brut = Math.min(0.999, Math.max(0.001, (v.moyen - aMin) / (aMax - aMin)));
+  let courbe = Math.log(0.5) / Math.log(brut);
+  courbe = Math.round(Math.min(3, Math.max(0.4, courbe)) * 20) / 20;
+  profils.setReglage(j.jeton, 'aMin', aMin);
+  profils.setReglage(j.jeton, 'aMax', aMax);
+  profils.setReglage(j.jeton, 'courbePuissance', courbe);
+  const texte = 'Puissance calibrée pour ' + j.nom + ' : ' + aMin + ' → ' + aMax + ' m/s², courbe ' + courbe.toFixed(2).replace('.', ',');
+  banc.noter(texte + ' (lent ' + Math.round(v.lent) + ', moyen ' + Math.round(v.moyen) + ', fort ' + Math.round(v.fort) + ')');
+  hud.message(texte, 3.5);
+}
+
+function appliquerCalibrageLift(j, v) {
+  let zone = Math.round(v.droit * 1.25);
+  let plein = Math.round(v.tourne * 0.9);
+  if (plein < zone + 15) plein = zone + 15;
+  profils.setReglage(j.jeton, 'effetZoneMorte', zone);
+  profils.setReglage(j.jeton, 'effetAnglePlein', plein);
+  const texte = 'Lift calibré pour ' + j.nom + ' : zone morte ' + zone + '°, plein effet ' + plein + '°';
+  banc.noter(texte + ' (droit ' + Math.round(v.droit) + '°, tourné ' + Math.round(v.tourne) + '°)');
+  hud.message(texte, 3.5);
 }
 
 // ---------- Code de salle et QR ----------

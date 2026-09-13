@@ -134,7 +134,8 @@ export class Partie extends EventTarget {
         break;
       case 'remise': {
         const duree = this.lire('dureeRemise', 2.6);
-        if (!this.remiseFaite && this.chrono > duree * 0.5) this._appliquerRemise();
+        // Respot : les quilles couchées sont retirées après le balayage (78 %) ; rack complet : dès la fin du balayage (50 %)
+        if (!this.remiseFaite && this.chrono > duree * (this.modeRemise === 'respot' ? 0.78 : 0.5)) this._appliquerRemise();
         if (this.chrono > duree) this._finirRemise();
         break;
       }

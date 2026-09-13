@@ -124,6 +124,10 @@ export function terminerGeste(g, tLeve) {
   } else {
     puissance = borner((g.picA - R.aMin) / Math.max(0.01, R.aMax - R.aMin));
   }
+  // Courbe de la jauge : exposant 1 = linéaire ; > 1 = il faut forcer davantage pour monter dans le haut de la jauge
+  // (calé par le lancer « moyen » du calibrage, pour qu'un geste habituel tombe vers 50 %).
+  const courbe = Number(R.courbePuissance);
+  if (Number.isFinite(courbe) && courbe > 0 && courbe !== 1) puissance = Math.pow(puissance, courbe);
 
   const signeMain = R.main === 'gauche' ? -1 : 1;
   const ampl = Math.max(0, Math.abs(base.torsion) - R.effetZoneMorte) / Math.max(1, R.effetAnglePlein - R.effetZoneMorte);

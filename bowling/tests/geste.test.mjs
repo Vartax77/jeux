@@ -50,7 +50,7 @@ console.log('Lancer normal (mode Relâcher)');
 {
   const res = jouer(balancier({}), 0, 640, R);
   verifier('type lancer', res.type === 'lancer', JSON.stringify(res));
-  verifier('puissance ≈ (15−4)/(22−4) = 0,61', proche(res.puissance, 11 / 18, 0.02), String(res.puissance));
+  verifier('puissance ≈ (15−4)/(32−4) = 0,39', proche(res.puissance, 11 / 28, 0.02), String(res.puissance));
   verifier('effet ≈ (38°−15)/(75−15) ≈ 0,39 (torsion 60°/s × 0,64 s)', proche(res.effet, (60 * 0.64 - 15) / 60, 0.06), String(res.effet) + ' torsion ' + res.torsion);
   verifier('phase normal', res.phase === 'normal', res.phase);
   verifier('instant retenu dans la fenêtre de tolérance', Math.abs(res.instant - 640) <= R.toleranceRelacher + 1, String(res.instant));
