@@ -39,8 +39,8 @@ const ETAPES_CALIB = {
     { cle: 'fort', consigne: 'lance FORT', aide: 'à pleine puissance, sans te faire mal', mesure: (r) => r.picA },
   ],
   lift: [
-    { cle: 'droit', consigne: 'lance POIGNET DROIT', aide: 'sans tourner la main : boule droite', mesure: (r) => Math.abs(r.torsion || 0) },
-    { cle: 'tourne', consigne: 'lance en TOURNANT LE POIGNET', aide: 'ton lift maximal, comme pour un gros crochet', mesure: (r) => Math.abs(r.torsion || 0) },
+    { cle: 'gauche', consigne: 'lance en LIFTANT VERS LA GAUCHE', aide: 'ton lift maximal, la boule doit crocheter à gauche', mesure: (r) => (Number.isFinite(r.torsion) ? r.torsion : NaN) },
+    { cle: 'droite', consigne: 'lance en LIFTANT VERS LA DROITE', aide: 'ton lift maximal, la boule doit crocheter à droite', mesure: (r) => (Number.isFinite(r.torsion) ? r.torsion : NaN) },
   ],
 };
 
@@ -949,14 +949,22 @@ function appliquerCalibragePuissance(j, v) {
   hud.message(texte, 3.5);
 }
 
+// Lift : un lancer lifté à gauche, un à droite. On en tire le SENS (quel signe de torsion envoie la boule à gauche,
+// selon la main et la prise du téléphone), l'amplitude du plein effet, et une zone morte proportionnelle.
 function appliquerCalibrageLift(j, v) {
-  let zone = Math.round(v.droit * 1.25);
-  let plein = Math.round(v.tourne * 0.9);
-  if (plein < zone + 15) plein = zone + 15;
+  const ampG = Math.abs(v.gauche), ampD = Math.abs(v.droite);
+  if (ampG < 8 || ampD < 8) { banc.noter('Lift non calibré pour ' + j.nom + ' : torsion trop faible (gauche ' + Math.round(ampG) + '°, droite ' + Math.round(ampD) + '°) — tourne franchement le poignet.'); hud.message('Lift non calibré : tourne plus franchement le poignet', 3.5); return; }
+  if (Math.sign(v.gauche) === Math.sign(v.droite)) { banc.noter('Lift non calibré pour ' + j.nom + ' : les deux lancers tournent dans le même sens (gauche ' + Math.round(v.gauche) + '°, droite ' + Math.round(v.droite) + '°).'); hud.message('Lift non calibré : les deux lancers tournent dans le même sens', 3.5); return; }
+  // Sens : dans geste.js, effet = signe(torsion) × signeEffet × signeMain, et effet négatif = crochet à gauche.
+  const signeMain = reglagesEffectifs(j).main === 'gauche' ? -1 : 1;
+  const signeEffet = Math.sign(v.gauche) * signeMain === -1 ? 1 : -1;
+  const plein = Math.round(0.9 * Math.min(ampG, ampD));
+  const zone = Math.max(6, Math.round(plein * 0.15));
+  profils.setReglage(j.jeton, 'signeEffet', signeEffet);
   profils.setReglage(j.jeton, 'effetZoneMorte', zone);
-  profils.setReglage(j.jeton, 'effetAnglePlein', plein);
-  const texte = 'Lift calibré pour ' + j.nom + ' : zone morte ' + zone + '°, plein effet ' + plein + '°';
-  banc.noter(texte + ' (droit ' + Math.round(v.droit) + '°, tourné ' + Math.round(v.tourne) + '°)');
+  profils.setReglage(j.jeton, 'effetAnglePlein', Math.max(zone + 15, plein));
+  const texte = 'Lift calibré pour ' + j.nom + ' : plein effet ' + Math.max(zone + 15, plein) + '°, zone morte ' + zone + '°' + (signeEffet === -1 ? ', sens inversé' : '');
+  banc.noter(texte + ' (gauche ' + Math.round(v.gauche) + '°, droite ' + Math.round(v.droite) + '°' + (ampG / ampD > 1.5 || ampD / ampG > 1.5 ? ' — amplitudes très différentes : le plein effet est calé sur le côté le plus faible' : '') + ')');
   hud.message(texte, 3.5);
 }
 

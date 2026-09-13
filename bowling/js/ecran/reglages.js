@@ -34,7 +34,7 @@ export const SCHEMA = [
       { id: 'axeEffet', type: 'choix', defaut: 'y', libelle: 'Axe de la torsion (effet)',
         options: [['y', 'y — axe long du téléphone'], ['x', 'x — largeur'], ['z', 'z — perpendiculaire à l’écran']],
         aide: 'Axe du téléphone autour duquel on mesure la rotation du poignet.' },
-      { id: 'signeEffet', type: 'choix', defaut: 1, libelle: 'Sens de l’effet', options: [[1, 'Normal'], [-1, 'Inversé']],
+      { id: 'signeEffet', type: 'choix', defaut: 1, profil: true, libelle: 'Sens de l’effet', options: [[1, 'Normal'], [-1, 'Inversé']],
         aide: 'À inverser si la courbe part du mauvais côté pour tout le monde.' },
       { id: 'effetZoneMorte', type: 'nombre', defaut: 15, min: 0, max: 45, pas: 1, unite: '°', profil: true, libelle: 'Zone morte de l’effet',
         aide: 'Rotation du poignet ignorée (un lancer « droit » reste droit).' },
