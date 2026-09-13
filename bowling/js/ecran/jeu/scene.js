@@ -223,9 +223,12 @@ export class Scene3D {
     liseret.position.set(0, 0.95, -(D.longueurPiste + D.longueurDeck) - 0.35);
     this.scene.add(liseret);
     // Fosse noire (ouverture sous le panneau)
+    // Fosse : bloc noir entièrement SOUS le niveau de la piste (sommet à −2 cm), visible seulement par les
+    // ouvertures : de chaque côté du deck (où la gouttière s'ouvre) et derrière lui.
     const longueurFosseVisible = D.longueurFosse + D.longueurDeck + 0.3;
-    const fosse = new THREE.Mesh(new THREE.BoxGeometry(D.largeurPiste + 2 * D.largeurGouttiere + 0.2, 0.9, longueurFosseVisible), mat('#07080b'));
-    fosse.position.set(0, 0.45 - D.profondeurFosse - 0.02, -(D.longueurPiste - 0.3) - longueurFosseVisible / 2);
+    const hauteurFosse = D.profondeurFosse - 0.02;
+    const fosse = new THREE.Mesh(new THREE.BoxGeometry(D.largeurPiste + 2 * D.largeurGouttiere + 0.2, hauteurFosse, longueurFosseVisible), mat('#07080b'));
+    fosse.position.set(0, -0.02 - hauteurFosse / 2, -(D.longueurPiste - 0.3) - longueurFosseVisible / 2);
     this.scene.add(fosse);
   }
 
