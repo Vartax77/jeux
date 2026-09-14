@@ -379,16 +379,34 @@ export class Scene3D {
   }
 
   _guide() {
+    // Ligne de visée : tirets larges (liseré sombre dessous pour ressortir sur le bois clair), jusqu'au deck,
+    // et une cible à l'endroit où la boule arriverait en ligne droite.
     this.guide = new THREE.Group();
-    const geo = new THREE.CircleGeometry(0.03, 16);
-    this.matGuide = new THREE.MeshBasicMaterial({ color: '#2f6fe4', transparent: true, opacity: 0.85 });
-    this.pointsGuide = [];
-    for (let i = 0; i < 14; i++) {
-      const m = new THREE.Mesh(geo, this.matGuide);
-      m.rotation.x = -Math.PI / 2;
-      this.guide.add(m);
-      this.pointsGuide.push(m);
+    this.matGuide = new THREE.MeshBasicMaterial({ color: '#2f6fe4', transparent: true, opacity: 0.95, depthWrite: false });
+    this.matGuideOmbre = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.35, depthWrite: false });
+    const geoTiret = new THREE.PlaneGeometry(0.09, 0.32);
+    const geoOmbre = new THREE.PlaneGeometry(0.15, 0.4);
+    this.tiretsGuide = [];
+    for (let i = 0; i < 36; i++) {
+      const g = new THREE.Group();
+      const ombre = new THREE.Mesh(geoOmbre, this.matGuideOmbre);
+      ombre.rotation.x = -Math.PI / 2; ombre.position.y = 0.004; ombre.renderOrder = 1;
+      const tiret = new THREE.Mesh(geoTiret, this.matGuide);
+      tiret.rotation.x = -Math.PI / 2; tiret.position.y = 0.006; tiret.renderOrder = 2;
+      g.add(ombre, tiret);
+      this.guide.add(g);
+      this.tiretsGuide.push(g);
     }
+    // Cible : anneau + point central, sur le deck
+    this.cibleGuide = new THREE.Group();
+    const anneau = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.21, 40), this.matGuide);
+    anneau.rotation.x = -Math.PI / 2; anneau.position.y = 0.006; anneau.renderOrder = 2;
+    const anneauOmbre = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.25, 40), this.matGuideOmbre);
+    anneauOmbre.rotation.x = -Math.PI / 2; anneauOmbre.position.y = 0.004; anneauOmbre.renderOrder = 1;
+    const centre = new THREE.Mesh(new THREE.CircleGeometry(0.05, 20), this.matGuide);
+    centre.rotation.x = -Math.PI / 2; centre.position.y = 0.006; centre.renderOrder = 2;
+    this.cibleGuide.add(anneauOmbre, anneau, centre);
+    this.guide.add(this.cibleGuide);
     this.scene.add(this.guide);
   }
 
@@ -482,11 +500,22 @@ export class Scene3D {
     this.boule.visible = true;
     if (positionMain) this.boule.position.copy(positionMain); else this.boule.position.set(x0, DIM.rayonBoule, 0);
     this.boule.quaternion.identity();
-    for (let i = 0; i < this.pointsGuide.length; i++) {
-      const d = 0.6 + i * 0.5;
-      this.pointsGuide[i].position.set(x0 + Math.sin(a) * d, 0.004, -Math.cos(a) * d);
-      this.pointsGuide[i].scale.setScalar(1 - i * 0.04);
+    const mode = this.lire('guideVisee', 'complet');
+    const longueur = mode === 'court' ? 7 : DIM.longueurPiste - 0.6;
+    const pas = 0.5;
+    for (let i = 0; i < this.tiretsGuide.length; i++) {
+      const d = 0.6 + i * pas;
+      const g = this.tiretsGuide[i];
+      g.visible = mode !== 'aucun' && d <= longueur;
+      g.position.set(x0 + Math.sin(a) * d, 0, -Math.cos(a) * d);
+      g.rotation.y = -a;
+      // Les tirets grossissent légèrement avec la distance pour compenser la perspective
+      g.scale.setScalar(1 + (d / DIM.longueurPiste) * 1.2);
     }
+    // Cible à la hauteur de la quille 1, sur la ligne droite
+    const dCible = DIM.longueurPiste / Math.cos(a);
+    this.cibleGuide.visible = mode === 'complet';
+    this.cibleGuide.position.set(x0 + Math.sin(a) * dCible, 0, -DIM.longueurPiste);
   }
 
   // Animation du pinsetter : progression p ∈ [0, 1], mode 'respot' (deuxième boule) ou 'rack' (rack complet).

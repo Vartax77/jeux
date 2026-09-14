@@ -895,11 +895,12 @@ function enregistrerEtapeCalibrage(j, s, res) {
   if (!Number.isFinite(v)) return;
   c.valeurs[etape.cle] = v;
   c.bras.push(s.brasExtremes ? s.brasExtremes.map((e) => e.slice()) : null);
+  (c.rotations || (c.rotations = [])).push(s.angleBras ? s.angleBras.slice() : null);
   c.index++;
   if (c.index < etapes.length) { banc.majCarte(j); afficherConsigneCalibrage(j, s); return; }
   s.calib = null;
   if (c.type === 'puissance') appliquerCalibragePuissance(j, c.valeurs);
-  else appliquerCalibrageLift(j, c.valeurs);
+  else appliquerCalibrageLift(j, c.valeurs, c.rotations);
   appliquerCalibrageBras(j, c.bras);
   envoyerConfig(j);
   banc.redessinerProfils();
@@ -951,20 +952,39 @@ function appliquerCalibragePuissance(j, v) {
 
 // Lift : un lancer lifté à gauche, un à droite. On en tire le SENS (quel signe de torsion envoie la boule à gauche,
 // selon la main et la prise du téléphone), l'amplitude du plein effet, et une zone morte proportionnelle.
-function appliquerCalibrageLift(j, v) {
-  const ampG = Math.abs(v.gauche), ampD = Math.abs(v.droite);
-  if (ampG < 8 || ampD < 8) { banc.noter('Lift non calibré pour ' + j.nom + ' : torsion trop faible (gauche ' + Math.round(ampG) + '°, droite ' + Math.round(ampD) + '°) — tourne franchement le poignet.'); hud.message('Lift non calibré : tourne plus franchement le poignet', 3.5); return; }
-  if (Math.sign(v.gauche) === Math.sign(v.droite)) { banc.noter('Lift non calibré pour ' + j.nom + ' : les deux lancers tournent dans le même sens (gauche ' + Math.round(v.gauche) + '°, droite ' + Math.round(v.droite) + '°).'); hud.message('Lift non calibré : les deux lancers tournent dans le même sens', 3.5); return; }
+// Le geste mesure la torsion autour d'UN axe du téléphone. Selon la prise, le balancier lui-même peut tourner
+// autour de cet axe et noyer le mouvement du poignet : tous les lancers partent alors du même côté. On regarde
+// donc les trois axes : celui du poignet est celui où « gauche » et « droite » tournent en sens opposés avec la plus
+// grande différence — jamais celui du balancier, qui tourne dans le même sens aux deux lancers.
+const NOM_AXE_EFFET = ['z', 'x', 'y']; // index du gyroscope (α, β, γ) → réglage axeEffet (voir INDEX_AXE dans geste.js)
+function appliquerCalibrageLift(j, v, rotations) {
+  let gauche = v.gauche, droite = v.droite, axe = null;
+  const rg = rotations && rotations[0], rd = rotations && rotations[1];
+  if (rg && rd) {
+    let meilleur = -1;
+    for (let k = 0; k < 3; k++) {
+      if (!Number.isFinite(rg[k]) || !Number.isFinite(rd[k])) continue;
+      if (Math.sign(rg[k]) === Math.sign(rd[k]) || Math.min(Math.abs(rg[k]), Math.abs(rd[k])) < 8) continue;
+      const ecart = Math.abs(rg[k] - rd[k]);
+      if (ecart > meilleur) { meilleur = ecart; axe = k; }
+    }
+    if (axe !== null) { gauche = rg[axe]; droite = rd[axe]; }
+  }
+  const ampG = Math.abs(gauche), ampD = Math.abs(droite);
+  const detail = ' (gauche ' + Math.round(gauche) + '°, droite ' + Math.round(droite) + '°' + (rg && rd ? ' ; axes α/β/γ gauche ' + rg.map(Math.round).join('/') + ', droite ' + rd.map(Math.round).join('/') : '') + ')';
+  if (ampG < 8 || ampD < 8) { banc.noter('Lift non calibré pour ' + j.nom + ' : torsion trop faible' + detail + ' — tourne franchement le poignet.'); hud.message('Lift non calibré : tourne plus franchement le poignet', 3.5); return; }
+  if (Math.sign(gauche) === Math.sign(droite)) { banc.noter('Lift non calibré pour ' + j.nom + ' : aucun axe ne tourne en sens opposés entre les deux lancers' + detail); hud.message('Lift non calibré : les deux lancers tournent dans le même sens', 3.5); return; }
   // Sens : dans geste.js, effet = signe(torsion) × signeEffet × signeMain, et effet négatif = crochet à gauche.
   const signeMain = reglagesEffectifs(j).main === 'gauche' ? -1 : 1;
-  const signeEffet = Math.sign(v.gauche) * signeMain === -1 ? 1 : -1;
+  const signeEffet = Math.sign(gauche) * signeMain === -1 ? 1 : -1;
+  if (axe !== null) profils.setReglage(j.jeton, 'axeEffet', NOM_AXE_EFFET[axe]);
   const plein = Math.round(0.9 * Math.min(ampG, ampD));
   const zone = Math.max(6, Math.round(plein * 0.15));
   profils.setReglage(j.jeton, 'signeEffet', signeEffet);
   profils.setReglage(j.jeton, 'effetZoneMorte', zone);
   profils.setReglage(j.jeton, 'effetAnglePlein', Math.max(zone + 15, plein));
-  const texte = 'Lift calibré pour ' + j.nom + ' : plein effet ' + Math.max(zone + 15, plein) + '°, zone morte ' + zone + '°' + (signeEffet === -1 ? ', sens inversé' : '');
-  banc.noter(texte + ' (gauche ' + Math.round(v.gauche) + '°, droite ' + Math.round(v.droite) + '°' + (ampG / ampD > 1.5 || ampD / ampG > 1.5 ? ' — amplitudes très différentes : le plein effet est calé sur le côté le plus faible' : '') + ')');
+  const texte = 'Lift calibré pour ' + j.nom + ' : axe ' + (axe !== null ? NOM_AXE_EFFET[axe] : reglagesEffectifs(j).axeEffet) + ', plein effet ' + Math.max(zone + 15, plein) + '°, zone morte ' + zone + '°' + (signeEffet === -1 ? ', sens inversé' : '');
+  banc.noter(texte + detail + (ampG / ampD > 1.5 || ampD / ampG > 1.5 ? ' — amplitudes très différentes : le plein effet est calé sur le côté le plus faible' : ''));
   hud.message(texte, 3.5);
 }
 
