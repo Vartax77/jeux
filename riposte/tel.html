@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Riposte — Manette</title>
+<style>
+  :root { --bg:#0b0e14; --fg:#e8ecf3; --dim:#7b8494; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,sans-serif;
+              overflow:hidden; touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  #login { display:flex; flex-direction:column; gap:14px; padding:40px 24px; height:100%; box-sizing:border-box; justify-content:center; }
+  input { font-size:34px; letter-spacing:.2em; text-align:center; text-transform:uppercase; padding:14px; border-radius:12px; border:1px solid #2a3140; background:#121722; color:var(--fg); font-family:ui-monospace,Menlo,monospace; }
+  button { font-size:22px; padding:18px; border-radius:14px; border:none; background:#e8ecf3; color:#0b0e14; font-weight:700; }
+  .small { color:var(--dim); font-size:14px; text-align:center; }
+  #pad { display:none; height:100%; flex-direction:column; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom); box-sizing:border-box; }
+  #status { text-align:center; padding:10px; font-size:14px; color:var(--dim); }
+  #center { margin:0 16px; padding:16px; border-radius:14px; background:#1a2130; color:var(--fg); font-size:18px; font-weight:600; text-align:center; }
+  #fire { flex:1; margin:14px 16px; border-radius:22px; background:radial-gradient(circle at 50% 45%, #2a1212, #140a0a); border:2px solid #7a2a2a;
+          display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:800; letter-spacing:.08em; color:#ff4d4d; }
+  #fire.flash { background:#ff4d4d; color:#0b0e14; }
+  #cover { margin:0 16px 16px; padding:26px; border-radius:22px; background:#0e2a1a; border:2px solid #2e7a4a; color:#3ddc84; font-size:22px; font-weight:800; text-align:center; letter-spacing:.08em; }
+  #cover.on { background:#3ddc84; color:#0b0e14; }
+  #err { color:#ff8080; font-size:14px; text-align:center; min-height:1.2em; }
+</style>
+</head>
+<body>
+<div id="login">
+  <div class="small">Tenez l'iPhone comme une télécommande, le haut vers l'écran du PC.</div>
+  <input id="code" placeholder="CODE" maxlength="6" autocomplete="off" autocapitalize="characters">
+  <button id="go">Connecter</button>
+  <div id="err"></div>
+  <div class="small">Le bouton demande l'accès aux capteurs de mouvement : appuyez sur « Autoriser ».</div>
+</div>
+<div id="pad">
+  <div id="status">connexion…</div>
+  <div id="center">⌖ Recentrer (visez le centre de l'écran)</div>
+  <div id="fire">TIRER</div>
+  <div id="cover">COUVRIR (maintenir)</div>
+</div>
+<script src="lib/peerjs.min.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  if (params.get('c')) $('code').value = params.get('c').toUpperCase();
+
+  let conn = null, n = 0;
+  let yaw = 0, pitch = 0, dirty = false;
+
+  // Orientation : téléphone tenu comme une télécommande (haut vers l'écran).
+  // Avec la convention W3C, le vecteur "haut du téléphone" donne yaw = -alpha et pitch = beta. Le roulis (gamma) est ignoré.
+  function onOrient(e) {
+    if (e.alpha === null) return;
+    yaw = -e.alpha; pitch = e.beta; dirty = true;
+  }
+  function loop() {
+    if (conn && conn.open && dirty) { conn.send({ t: 'a', y: yaw, p: pitch }); dirty = false; }
+    requestAnimationFrame(loop);
+  }
+
+  async function askSensors() {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const r = await DeviceOrientationEvent.requestPermission();   // iOS 13+ : doit être appelé dans un geste utilisateur
+      if (r !== 'granted') throw new Error('Accès aux capteurs refusé. Rechargez la page et acceptez.');
+    }
+    addEventListener('deviceorientation', onOrient);
+  }
+
+  $('go').addEventListener('click', async () => {
+    const code = $('code').value.trim().toUpperCase();
+    $('err').textContent = '';
+    if (code.length < 6) { $('err').textContent = 'Code incomplet (6 caractères).'; return; }
+    try { await askSensors(); } catch (e) { $('err').textContent = e.message; return; }
+    try { const wl = await navigator.wakeLock?.request('screen'); } catch (_) {}
+    connect(code);
+  });
+
+  function connect(code) {
+    const peer = new Peer({ debug: 1 });
+    peer.on('open', () => {
+      conn = peer.connect('riposte-' + code, { serialization: 'json' });
+      conn.on('open', () => { $('login').style.display = 'none'; $('pad').style.display = 'flex'; $('status').textContent = 'connecté'; loop(); });
+      conn.on('data', m => {
+        if (m.t === 'hello') { n = m.n; $('status').textContent = 'Joueur ' + n + ' · connecté'; $('pad').style.background = n === 1 ? '#150b0b' : '#0b1220'; }
+        if (m.t === 'ping') conn.send({ t: 'pong', ts: m.ts });
+        if (m.t === 'full') $('err').textContent = 'Salle pleine (2 joueurs max).';
+      });
+      conn.on('close', () => { $('status').textContent = 'déconnecté — rechargez la page'; });
+      conn.on('error', e => { $('err').textContent = 'Erreur : ' + e; });
+    });
+    peer.on('error', e => {
+      $('err').textContent = e.type === 'peer-unavailable' ? 'Aucune salle avec ce code. Vérifiez le code sur l\'écran du PC.' : 'Erreur réseau : ' + e.type;
+    });
+  }
+
+  // Boutons (pointerdown pour éviter le délai de 300 ms et le double-tap-zoom)
+  $('center').addEventListener('pointerdown', e => { e.preventDefault(); conn?.send({ t: 'center' }); });
+  $('fire').addEventListener('pointerdown', e => {
+    e.preventDefault(); conn?.send({ t: 'fire' });
+    $('fire').classList.add('flash'); setTimeout(() => $('fire').classList.remove('flash'), 60);
+  });
+  const cov = $('cover');
+  const setCover = on => { cov.classList.toggle('on', on); conn?.send({ t: 'cover', on }); };
+  cov.addEventListener('pointerdown', e => { e.preventDefault(); setCover(true); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) cov.addEventListener(ev, () => setCover(false));
+  addEventListener('visibilitychange', () => { if (document.hidden) setCover(false); });
+})();
+</script>
+</body>
+</html>

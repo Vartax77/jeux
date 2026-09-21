@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Riposte — Écran (lot 1 : visée)</title>
+<style>
+  :root { --bg:#0b0e14; --fg:#e8ecf3; --dim:#7b8494; --p1:#ff4d4d; --p2:#4da6ff; --ok:#3ddc84; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,Segoe UI,Roboto,sans-serif; overflow:hidden; }
+  canvas { display:block; width:100vw; height:100vh; }
+  #hud { position:fixed; inset:0; pointer-events:none; }
+  #lobby { position:fixed; top:16px; left:16px; background:rgba(0,0,0,.55); border:1px solid #2a3140; border-radius:10px; padding:14px 18px; max-width:560px; }
+  #code { font-size:44px; letter-spacing:.18em; font-weight:700; font-family:ui-monospace,Consolas,monospace; }
+  .small { color:var(--dim); font-size:13px; }
+  #url { font-family:ui-monospace,Consolas,monospace; font-size:14px; word-break:break-all; margin:6px 0 10px; }
+  .p { display:inline-block; margin-right:18px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; background:#333; }
+  #help { position:fixed; bottom:12px; left:16px; color:var(--dim); font-size:13px; }
+  #err { position:fixed; top:16px; right:16px; background:#3a1010; border:1px solid #a33; padding:10px 14px; border-radius:8px; display:none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div id="lobby">
+    <div class="small">Sur chaque iPhone, ouvrir <b>tel.html</b> et saisir ce code :</div>
+    <div id="code">······</div>
+    <div id="url" class="small"></div>
+    <div>
+      <span class="p"><span class="dot" id="d1"></span>Joueur 1 <span class="small" id="s1">en attente</span></span>
+      <span class="p"><span class="dot" id="d2"></span>Joueur 2 <span class="small" id="s2">en attente</span></span>
+    </div>
+    <div class="small" style="margin-top:8px">Ouverture horizontale de visée (sensibilité) : <b id="fov">40</b>° — touches <b>+</b> / <b>−</b> · <b>L</b> masque/affiche ce panneau</div>
+  </div>
+  <div id="help">Cibles : touchez-les pour les déplacer. Tir = tap sur le téléphone · Couvrir = bouton bas maintenu · Recentrer = bouton haut en visant le centre de l'écran.</div>
+  <div id="err"></div>
+</div>
+<script src="lib/peerjs.min.js"></script>
+<script>
+(() => {
+  // ---------- Réglages ----------
+  const FOV_X_DEFAULT = 40;          // degrés couverts par la largeur de l'écran
+  const SMOOTH = 0.35;               // lissage du réticule (0 = figé, 1 = brut)
+  const MAX_PLAYERS = 2;
+  const COLORS = ['#ff4d4d', '#4da6ff'];
+
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+  let W = 0, H = 0, fovX = FOV_X_DEFAULT;
+
+  function resize() {
+    const r = window.devicePixelRatio || 1;
+    W = cv.width = Math.floor(innerWidth * r);
+    H = cv.height = Math.floor(innerHeight * r);
+    ctx.setTransform(r, 0, 0, r, 0, 0);
+  }
+  addEventListener('resize', resize); resize();
+
+  // ---------- Joueurs ----------
+  // Chaque joueur : angles bruts reçus (yaw/pitch), référence de recentrage, réticule lissé, état couvert, ping.
+  const players = [null, null];
+  function newPlayer(conn, slot) {
+    return { conn, slot, yaw: 0, pitch: 0, yaw0: null, pitch0: null,
+             x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, cover: false, ping: null,
+             lastFire: 0, hits: 0, shots: 0, ready: false };
+  }
+  const wrap = d => ((d + 540) % 360) - 180;   // ramène un écart d'angle dans [-180, 180[
+
+  function updateCursor(p) {
+    if (p.yaw0 === null) return;
+    const dy = wrap(p.yaw - p.yaw0);
+    const dp = p.pitch - p.pitch0;
+    const fovY = fovX * (innerHeight / innerWidth);
+    p.tx = 0.5 + dy / fovX;
+    p.ty = 0.5 - dp / fovY;
+    p.tx = Math.min(1.05, Math.max(-0.05, p.tx));
+    p.ty = Math.min(1.05, Math.max(-0.05, p.ty));
+  }
+
+  // ---------- Cibles d'entraînement ----------
+  const targets = [];
+  function placeTarget(t) {
+    t.x = 0.12 + Math.random() * 0.76; t.y = 0.15 + Math.random() * 0.7; t.r = 28 + Math.random() * 22; t.hitAt = 0;
+  }
+  for (let i = 0; i < 5; i++) { const t = {}; placeTarget(t); targets.push(t); }
+  cv.addEventListener('pointerdown', e => {
+    for (const t of targets) {
+      const dx = e.clientX - t.x * innerWidth, dy = e.clientY - t.y * innerHeight;
+      if (dx * dx + dy * dy < t.r * t.r) { placeTarget(t); return; }
+    }
+  });
+
+  const flashes = []; // impacts : {x, y, t, color, hit}
+
+  function fire(p) {
+    if (p.cover || p.yaw0 === null) return;
+    const now = performance.now();
+    p.shots++; p.lastFire = now;
+    const px = p.x * innerWidth, py = p.y * innerHeight;
+    let hit = false;
+    for (const t of targets) {
+      const dx = px - t.x * innerWidth, dy = py - t.y * innerHeight;
+      if (dx * dx + dy * dy < t.r * t.r) { hit = true; t.hitAt = now; p.hits++; setTimeout(() => placeTarget(t), 250); break; }
+    }
+    flashes.push({ x: px, y: py, t: now, color: COLORS[p.slot], hit });
+  }
+
+  // ---------- Réseau (PeerJS) ----------
+  const code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('')
+             + (10 + Math.random() * 90 | 0);
+  $('code').textContent = code;
+  $('url').textContent = location.href.replace(/index\.html.*$|\/?(\?.*)?$/, '/tel.html?c=' + code).replace('//tel', '/tel');
+
+  const peer = new Peer('riposte-' + code, { debug: 1 });
+  peer.on('error', e => { const el = $('err'); el.style.display = 'block'; el.textContent = 'Erreur réseau : ' + e.type; });
+  peer.on('open', () => console.log('salle ouverte', code));
+  peer.on('connection', conn => {
+    const slot = players.findIndex(p => p === null);
+    if (slot < 0) { conn.on('open', () => { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 300); }); return; }
+    const p = newPlayer(conn, slot);
+    players[slot] = p;
+    conn.on('open', () => {
+      p.ready = true;
+      conn.send({ t: 'hello', n: slot + 1 });
+      setStatus(slot, 'connecté', COLORS[slot]);
+    });
+    conn.on('data', m => {
+      switch (m.t) {
+        case 'a':  p.yaw = m.y; p.pitch = m.p; if (p.yaw0 === null) { p.yaw0 = m.y; p.pitch0 = m.p; } updateCursor(p); break;
+        case 'fire': fire(p); break;
+        case 'cover': p.cover = !!m.on; break;
+        case 'center': p.yaw0 = p.yaw; p.pitch0 = p.pitch; updateCursor(p); break;
+        case 'pong': p.ping = Math.round(performance.now() - m.ts); break;
+      }
+    });
+    const bye = () => { players[slot] = null; setStatus(slot, 'déconnecté', '#333'); };
+    conn.on('close', bye); conn.on('error', bye);
+  });
+  function setStatus(slot, txt, color) { $('s' + (slot + 1)).textContent = txt; $('d' + (slot + 1)).style.background = color; }
+  setInterval(() => { for (const p of players) if (p && p.ready) p.conn.send({ t: 'ping', ts: performance.now() }); }, 1000);
+
+  // ---------- Clavier ----------
+  addEventListener('keydown', e => {
+    if (e.key === '+' || e.key === '=') fovX = Math.min(90, fovX + 2);
+    if (e.key === '-') fovX = Math.max(10, fovX - 2);
+    if (e.key.toLowerCase() === 'l') $('lobby').style.display = $('lobby').style.display === 'none' ? '' : 'none';
+    $('fov').textContent = fovX;
+  });
+
+  // ---------- Rendu ----------
+  function draw() {
+    const now = performance.now();
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    // grille de fond
+    ctx.strokeStyle = '#161b25'; ctx.lineWidth = 1;
+    for (let x = 0; x < innerWidth; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, innerHeight); ctx.stroke(); }
+    for (let y = 0; y < innerHeight; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(innerWidth, y); ctx.stroke(); }
+    // repère central (pour recentrer)
+    ctx.strokeStyle = '#2a3140'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(innerWidth / 2 - 14, innerHeight / 2); ctx.lineTo(innerWidth / 2 + 14, innerHeight / 2);
+    ctx.moveTo(innerWidth / 2, innerHeight / 2 - 14); ctx.lineTo(innerWidth / 2, innerHeight / 2 + 14); ctx.stroke();
+    // cibles
+    for (const t of targets) {
+      const cx = t.x * innerWidth, cy = t.y * innerHeight;
+      const hot = now - t.hitAt < 250;
+      for (let i = 3; i >= 1; i--) {
+        ctx.beginPath(); ctx.arc(cx, cy, t.r * i / 3, 0, Math.PI * 2);
+        ctx.fillStyle = hot ? '#3ddc84' : (i % 2 ? '#e8ecf3' : '#c03a3a'); ctx.fill();
+      }
+    }
+    // impacts
+    for (let i = flashes.length - 1; i >= 0; i--) {
+      const f = flashes[i], a = 1 - (now - f.t) / 400;
+      if (a <= 0) { flashes.splice(i, 1); continue; }
+      ctx.globalAlpha = a; ctx.strokeStyle = f.color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(f.x, f.y, 10 + (1 - a) * 30, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    // réticules + infos joueurs
+    players.forEach((p, i) => {
+      if (!p || !p.ready) return;
+      p.x += (p.tx - p.x) * SMOOTH; p.y += (p.ty - p.y) * SMOOTH;
+      const cx = p.x * innerWidth, cy = p.y * innerHeight, col = COLORS[i];
+      const recoil = Math.max(0, 1 - (now - p.lastFire) / 120) * 6;
+      if (!p.cover) {
+        ctx.strokeStyle = col; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(cx, cy, 18 + recoil, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath();
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.moveTo(cx + dx * 8, cy + dy * 8); ctx.lineTo(cx + dx * 28, cy + dy * 28); }
+        ctx.stroke();
+        ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = col; ctx.font = '600 15px system-ui';
+      const info = `J${i + 1}  ${p.cover ? 'À COUVERT' : 'EN VISÉE'}  ·  touches ${p.hits}/${p.shots}  ·  ping ${p.ping ?? '–'} ms`;
+      ctx.fillText(info, innerWidth - 20 - ctx.measureText(info).width, 30 + i * 24);
+      if (p.cover) {
+        ctx.fillStyle = col + '22'; ctx.fillRect(i ? innerWidth / 2 : 0, 0, innerWidth / 2, innerHeight);
+      }
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+</script>
+</body>
+</html>
