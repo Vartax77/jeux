@@ -33,6 +33,10 @@
   #timer.urgent { color:#ff4040; animation:blink .5s steps(1) infinite; }
   @keyframes blink { 50% { opacity:.35; } }
   #wave { position:absolute; top:84px; left:50%; transform:translateX(-50%); color:var(--dim); font-size:13px; letter-spacing:.1em; text-transform:uppercase; }
+  #bossbar { position:absolute; bottom:34px; left:50%; transform:translateX(-50%); width:min(640px, 70vw); text-align:center; }
+  #bossname { font-weight:900; letter-spacing:.12em; color:#ff6a3a; text-shadow:0 2px 8px #000; margin-bottom:6px; }
+  #bosstrack { height:12px; border:2px solid #ff6a3a; border-radius:8px; background:rgba(0,0,0,.5); overflow:hidden; }
+  #bossfill { height:100%; width:100%; background:linear-gradient(90deg,#ff3a1a,#ffb03a); transition:width .2s; }
   #stats { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,.75); border:1px solid #2a3140; border-radius:14px; padding:26px 34px; text-align:center; z-index:5; min-width:420px; }
   #stTitle { font-size:36px; font-weight:900; margin-bottom:12px; }
   .strow { font-size:16px; margin:6px 0; font-weight:600; }
@@ -57,10 +61,11 @@
     <span class="p"><span class="dot" id="d1"></span>Joueur 1 <span class="small" id="s1">en attente</span></span>
     <span class="p"><span class="dot" id="d2"></span>Joueur 2 <span class="small" id="s2">en attente</span></span>
   </div>
-  <div id="start">Quand tout le monde est connecté : appuyez sur TIRER pour lancer la partie.</div>
+  <div id="load" class="small">Ressources : chargement…</div>
+  <div id="start">Quand tout le monde est connecté : appuyez sur TIRER pour ouvrir le menu. Cliquez une fois sur cette page pour activer le son du PC.</div>
   <div class="small" style="margin-top:8px">
     Visée <b id="fov">40</b>° (touches <b>+</b> / <b>−</b>) · recentrage à la sortie de couvert : <b id="autoc">doux</b> (<b>R</b> : doux / fort / non) ·
-    <b>K</b> ajoute un joueur clavier/souris · <b>M</b> son · <b>L</b> masque ce panneau
+    <b>K</b> joueur clavier/souris · <b>M</b> son · <b>N</b> musique · <b>Échap</b> menu · <b>L</b> masque ce panneau
   </div>
 </div>
 
@@ -69,11 +74,12 @@
   <div class="pl" id="p2"><div class="name">JOUEUR 2</div><div class="lives"></div><div class="ammo"></div><div class="score">000000</div><div class="ping"></div></div>
   <div id="timer"></div>
   <div id="wave"></div>
+  <div id="bossbar" class="hidden"><div id="bossname"></div><div id="bosstrack"><div id="bossfill"></div></div></div>
 </div>
 
 <div id="stats" class="hidden"><div id="stTitle"></div><div id="stRows"></div><div id="stHint"></div></div>
 <div id="err"></div>
-<div id="help">Ennemis : gris = imprécis · rouge = tire à coup sûr · vert = grenade (abattable) · orange = charge · jaune = +5 s. L'anneau rouge qui se referme annonce un tir : abattez-le ou couvrez-vous.</div>
+<div id="help">Gris = imprécis · rouge = tire à coup sûr · vert = grenade (abattable) · orange = charge · jaune = +5 s · l'anneau rouge annonce un tir. Boss : visez les parties qui brillent.</div>
 
 <script src="lib/peerjs.min.js"></script>
 <script src="lib/qrcode.js"></script>

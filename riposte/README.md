@@ -1,41 +1,70 @@
 # Riposte — rail shooter façon Time Crisis (écran PC + iPhones pistolets)
 
-Tout est statique (GitHub Pages, dépôt `jeux`, dossier `riposte/`). Liaison PeerJS ; Three.js, PeerJS et le générateur de QR sont copiés en local dans `lib/`.
+Tout est statique (GitHub Pages, dépôt `jeux`, dossier `riposte/`). Liaison PeerJS. Three.js, ses chargeurs FBX/GLTF, PeerJS et le générateur de QR sont copiés en local dans `lib/`.
 
 ## Lancer
-1. PC : ouvrir `https://<utilisateur>.github.io/jeux/riposte/` — QR code + code à 6 caractères.
-2. iPhone (Safari) : scanner le QR code (ou ouvrir `tel.html` et saisir le code), « Connecter », accepter l'accès aux capteurs.
-3. Tenir l'iPhone à plat, le haut de l'appareil vers l'écran ; viser le centre et appuyer « Recentrer ».
-4. TIRER pour lancer la partie.
+1. PC : `https://<utilisateur>.github.io/jeux/riposte/` — QR code + code. Cliquer une fois sur la page pour autoriser le son du PC.
+2. iPhone (Safari) : scanner le QR code, « Connecter », accepter les capteurs. Tenir l'iPhone à plat, le haut vers l'écran ; viser le centre, « Recentrer ».
+3. TIRER ouvre le menu : viser une zone et tirer dessus pour la lancer.
 
-> HTTPS obligatoire : iOS refuse le gyroscope sur une page `http://`. Tester sur GitHub Pages.
-> Sur PC, la touche **K** ajoute un joueur clavier/souris (clic = tir, Espace = couvrir) pour tester sans téléphone.
+> HTTPS obligatoire (gyroscope iOS). Sur PC, **K** ajoute un joueur clavier/souris (clic = tir, Espace = couvrir).
 
-## Règles (lot 2)
-- 8 balles, rechargées automatiquement à couvert. À couvert : invulnérable, on ne tire pas.
-- 3 vies par joueur. Une balle ennemie reçue = 1 vie. Chrono 40 s par point de rail ; à 0 = 1 vie pour tous, chrono remis.
-- Ennemis : gris (imprécis), rouge (tire à coup sûr), vert (grenade lente, abattable), orange (charge), jaune (+5 s, ne tire pas).
-- Un anneau rouge se referme sur l'ennemi qui va tirer : l'abattre avant, ou se couvrir. Les balles ennemies sont visibles et abattables (+50, grenade +150).
-- Tête = ×2 points. Jambes = l'ennemi tombe à genoux 2 s et ne tire plus ; le coup suivant l'achève.
-- Difficulté adaptative : le délai d'annonce se resserre avec les kills consécutifs, se relâche après une vie perdue.
-- Ralenti sur le dernier ennemi de chaque vague.
-- Coop : chaque joueur a ses vies, ses balles, son score. La caméra se baisse quand tous les joueurs vivants sont à couvert.
-- Game over : TIRER = continue (reprise au point courant, vies pleines).
+## Structure
+- `js/game.js` moteur (scène, thèmes, déroulé, HUD, menu) · `js/entities.js` ennemis et projectiles · `js/bosses.js` les trois boss
+- `js/levels.js` **les trois zones en données** (rail, vagues, événements, boss) · `js/characters.js` personnages (procédural ou Mixamo)
+- `js/assets.js` ressources optionnelles · `js/music.js` musique synthétisée · `js/audio.js` bruitages · `js/net.js` liaison iPhone
+
+## Règles
+- 8 balles, rechargées à couvert. À couvert : invulnérable, pas de tir. 3 vies par joueur. Chrono 40 s par point (boss : 90–120 s) ; à 0 = 1 vie pour tous.
+- Gris = imprécis · rouge = tire à coup sûr · vert = grenade lente abattable · orange = charge · jaune = +5 s. L'anneau rouge annonce un tir.
+- Tête = ×2. Jambes = à genoux 2 s puis un coup l'achève. Balles ennemies abattables (+50, grenade +150). Difficulté adaptative, ralenti sur le dernier ennemi.
+- Boss : **Blindé** (4 panneaux qui s'ouvrent deux par deux, 3 coups chacun), **Hélicoptère** (réservoir ventral exposé quand il s'immobilise pour larguer des hommes), **Le Colonel** (bouclier ; exposé quand il lance une grenade, tête = 2 dégâts). Renforts plafonnés.
+- Coop : vies, balles et score par joueur ; la caméra se baisse quand tous les joueurs vivants sont à couvert. Game over : TIRER = continue au point courant.
 
 ## Touches PC
-`+` / `−` sensibilité · `R` recentrage à la sortie de couvert (doux / fort / non) · `K` joueur clavier/souris · `M` son · `L` panneau lobby.
+`+`/`−` sensibilité · `R` recentrage (doux / fort / non) · `K` joueur clavier · `M` son · `N` musique · `Échap` menu · `L` panneau lobby
 
-## Lot 2 — checklist de validation
-- [ ] Le QR code connecte l'iPhone ; TIRER lance la partie ; bandeau « ZONE 1 » puis « ACTION ! ».
-- [ ] Le réticule est stable main immobile et suit sans retard main rapide (filtre 1 €).
-- [ ] Recentrage doux : sortir de couvert sans avoir bougé le pistolet ne fait pas sauter le réticule ; après l'avoir baissé/relevé (> 20°), il revient au centre. R change le mode (doux / fort / non).
-- [ ] Tirer sur un ennemi le fait tomber ; tête = son aigu et ×2 ; jambes = à genoux.
-- [ ] L'anneau rouge apparaît avant chaque tir ennemi ; se couvrir évite la balle (bruit de passage) ; ne pas se couvrir = vignette rouge, vie en moins, téléphone qui flashe.
-- [ ] Une balle ennemie en vol peut être abattue.
-- [ ] 8 balles puis « RECHARGE » ; se couvrir recharge.
-- [ ] Chrono : tic-tac sous 10 s ; à 0, tout le monde perd une vie.
-- [ ] Après la vague 2 d'un point : « ATTENDEZ ! », la caméra glisse au point suivant.
-- [ ] 3 points nettoyés → « ZONE NETTOYÉE » + statistiques ; TIRER relance.
-- [ ] 0 vie pour tous → GAME OVER ; TIRER continue au point courant.
-- [ ] À deux : deux réticules, deux HUD, cibles partagées ; un joueur éliminé laisse l'autre finir.
-- [ ] Performance : fluide en plein écran (F11) sur le PC.
+## Ressources optionnelles (dossier `assets/`, tout est facultatif)
+Le jeu tourne sans aucun fichier. Chaque fichier présent remplace sa version procédurale au chargement ; le panneau du lobby indique ce qui a été trouvé (détail dans la console F12).
+
+### Personnage animé — Mixamo (gratuit, compte Adobe)
+1. Sur mixamo.com, onglet **Characters**, choisir un soldat (ex. « Swat », « Vanguard », « Soldier »). Bouton **Download** : Format **FBX Binary**, Pose **T-pose**, **With Skin** → enregistrer sous `assets/characters/soldier.fbx`.
+2. Onglet **Animations**, pour chacune ci-dessous : chercher, cliquer, **Download** avec Format **FBX Binary**, Skin **Without Skin**, 30 fps, Keyframe reduction none :
+   | Fichier | Animation Mixamo conseillée |
+   |---|---|
+   | `assets/anim/idle.fbx` | Rifle Idle ou Pistol Idle |
+   | `assets/anim/aim.fbx` | Rifle Aiming Idle |
+   | `assets/anim/shoot.fbx` | Firing Rifle |
+   | `assets/anim/death.fbx` | Death From Front Headshot ou Falling Back Death |
+   | `assets/anim/kneel.fbx` | Crouch Idle ou Kneeling Idle |
+   | `assets/anim/run.fbx` | Rifle Run |
+3. Recharger la page : le lobby doit afficher « personnage Mixamo chargé ». Sinon, ouvrir la console (F12) : le message indique le fichier fautif.
+Le même personnage sert à tous les types d'ennemis, teinté selon la couleur du type. Les hitboxes (tête, torse, bras, jambes) sont attachées aux os.
+
+### Textures — Runway (ou autre générateur d'images)
+Carrées, **répétables** (« seamless / tileable »), JPG 1024×1024 ou 2048×2048, sans texte ni logo :
+| Fichier | Prompt |
+|---|---|
+| `assets/tex/ground.jpg` | seamless tileable texture, wet concrete dock floor, oil stains, top-down, flat lighting, no text |
+| `assets/tex/asphalt.jpg` | seamless tileable texture, dark asphalt road, cracks, top-down, flat lighting |
+| `assets/tex/concrete.jpg` | seamless tileable texture, raw grey concrete wall, subtle stains, flat lighting |
+| `assets/tex/container.jpg` | seamless tileable texture, corrugated shipping container metal, rust streaks, neutral grey (la couleur est appliquée par le jeu) |
+| `assets/tex/metal.jpg` | seamless tileable texture, scratched painted steel plate, rivets, flat lighting |
+| `assets/tex/brick.jpg` | seamless tileable texture, old brick wall, weathered, flat lighting |
+
+### Fonds panoramiques — Runway
+Paysage très large, **4096×1024** (rapport 4:1), horizon au milieu, sans texte ; le bord gauche doit raccorder avec le bord droit (demander « seamless horizontal panorama ») :
+| Fichier | Prompt |
+|---|---|
+| `assets/backdrops/docks.jpg` | 360 seamless horizontal panorama, industrial harbor at night, cranes, container stacks, distant city lights, fog, cinematic, no text |
+| `assets/backdrops/street.jpg` | 360 seamless horizontal panorama, rainy city street at night, neon signs, wet asphalt reflections, tall buildings, no text |
+| `assets/backdrops/hangar.jpg` | 360 seamless horizontal panorama, interior of a huge dark industrial hangar, steel trusses, spotlights, haze, no text |
+
+## Lot 3 — checklist de validation
+- [ ] Lobby → TIRER → menu titre : les trois cartes ; viser + tirer lance la zone choisie ; Échap revient au menu.
+- [ ] Zone 1 : bandeau + texte d'intro, musique, chute de conteneur (pt 1 vague 2), explosion (pt 2). Boss blindé : panneaux ouverts brillants, rafales, renforts ; barre de vie ; explosion finale ; « ZONE NETTOYÉE » ; TIRER → zone 2.
+- [ ] Zone 2 : ennemis aux fenêtres (3,2 m) et sur les toits (6,5 m), voitures en couvert, vitre brisée. Boss hélico : balayage, immobilisation, largage de 2 hommes, réservoir ventral brillant.
+- [ ] Zone 3 : passerelles, projecteurs, ambiance sombre. Boss colonel : bouclier (ricochets), fenêtre d'exposition pendant la grenade, renforts orange.
+- [ ] Musique : boucle par zone, s'intensifie sous 10 s de chrono, thème de boss ; N la coupe.
+- [ ] Performance en plein écran (F11). Si ça rame en zone 3 (projecteurs), le dire : on réduira.
+- [ ] Après dépôt des fichiers Mixamo : « personnage Mixamo chargé » ; animations visée/tir/mort/genoux/course cohérentes ; hitboxes tête/torse justes (tirer sur la tête = son aigu).
