@@ -51,8 +51,8 @@ export class TankBoss extends BossBase {
     this.barrel = this.add(new THREE.CylinderGeometry(0.14, 0.16, 2.6, 10), dark, 0, 2.3, 2.2, 'armor'); this.barrel.rotation.x = Math.PI / 2;
     this.panels = [];
     const spots = [[-1.35, 1.1], [1.35, 1.1], [-0.75, 1.85], [0.75, 1.85]];
-    spots.forEach(([x, y], i) => { const m = this.add(new THREE.BoxGeometry(0.75, 0.6, 0.16), mat(0x2f3540, { emissive: 0x000000 }), x, y, 2.78, 'weak'); m.userData.idx = i; this.panels.push({ mesh: m, hp: 3, open: false, dead: false }); });
-    this.hpMax = 12; this.hp = 12; this.cycle = 0; this.face();
+    spots.forEach(([x, y], i) => { const m = this.add(new THREE.BoxGeometry(0.75, 0.6, 0.16), mat(0x2f3540, { emissive: 0x000000 }), x, y, 2.78, 'weak'); m.userData.idx = i; this.panels.push({ mesh: m, hp: 4, open: false, dead: false }); });
+    this.hpMax = 16; this.hp = 16; this.cycle = 0; this.face();
     this.group.position.y = -3;
   }
   hit(part, p, pan, mesh) {
@@ -76,16 +76,16 @@ export class TankBoss extends BossBase {
     if (this.cycle <= 0) {
       const anyOpen = this.panels.some(q => q.open);
       for (const q of this.panels) if (q.open) this.setOpen(q, false);
-      if (!anyOpen) { const alive = this.panels.filter(q => !q.dead).sort(() => Math.random() - 0.5); alive.slice(0, 2).forEach(q => this.setOpen(q, true)); this.cycle = 3.0; g.audio.lock(this.pan()); }
-      else this.cycle = 2.0;
+      if (!anyOpen) { const alive = this.panels.filter(q => !q.dead).sort(() => Math.random() - 0.5); alive.slice(0, 2).forEach(q => this.setOpen(q, true)); this.cycle = 2.4; g.audio.lock(this.pan()); }
+      else this.cycle = 1.6;
     }
-    // Tir : annonce 1,1 s puis rafale de 3
+    // Tir : annonce 1,0 s puis rafale de 4
     this.fireTimer += dt;
     const tip = this.barrel.localToWorld(new THREE.Vector3(0, 1.3, 0));
-    const period = 2.6, ann = 1.1;
+    const period = 2.3, ann = 1.0;
     const ph = this.fireTimer % period;
     this.tele = ph > period - ann ? [{ pos: tip, k: (ph - (period - ann)) / ann }] : [];
-    if (this.fireTimer >= period) { this.fireTimer -= period; this.burst = 3; this.burstT = 0; }
+    if (this.fireTimer >= period) { this.fireTimer -= period; this.burst = 4; this.burstT = 0; }
     if (this.burst > 0) { this.burstT -= dt; if (this.burstT <= 0) { this.shootAt(tip); this.burst--; this.burstT = 0.16; g.shake = Math.max(g.shake, 0.15); } }
     // Renforts toutes les 12 s
     this.spawnTimer += dt;
@@ -108,7 +108,7 @@ export class HeliBoss extends BossBase {
     this.rotor = new THREE.Group(); this.rotor.position.set(0, 1.3, -0.3); this.group.add(this.rotor);
     for (const a of [0, Math.PI / 2]) { const b = this.add(new THREE.BoxGeometry(9, 0.06, 0.35), dark, 0, 0, 0, 'armor', this.rotor); b.rotation.y = a; b.castShadow = false; }
     this.tail = this.add(new THREE.BoxGeometry(1.6, 0.05, 0.2), dark, 0.2, 0.9, -6.2, 'armor'); this.tail.rotation.z = Math.PI / 2;
-    this.hpMax = 14; this.hp = 14; this.cycleT = 0; this.phase = 'strafe'; this.x0 = def.pos[0]; this.y0 = def.pos[1];
+    this.hpMax = 20; this.hp = 20; this.cycleT = 0; this.phase = 'strafe'; this.x0 = def.pos[0]; this.y0 = def.pos[1];
     this.group.position.y = this.y0 + 14; this.face();
   }
   hit(part, p, pan) {
@@ -143,7 +143,7 @@ export class HeliBoss extends BossBase {
     } else {
       this.group.rotation.z *= 0.9; this.group.position.y = this.y0 - 1.5 + Math.sin(this.cycleT * 3) * 0.15;
       if (!this.dropped && this.cycleT > 0.8 && this.minions() < 4) { this.dropped = true; const x = this.group.position.x, z = this.pos.z + 6; g.spawnEnemy({ type: 'grunt', pos: [x - 2, 0, z] }); g.spawnEnemy({ type: 'rusher', pos: [x + 2, 0, z] }); }
-      if (this.cycleT > 3.2) { this.phase = 'strafe'; this.cycleT = 0; this.engine.material.emissive.setHex(0x000000); this.fireTimer = 0; }
+      if (this.cycleT > 2.6) { this.phase = 'strafe'; this.cycleT = 0; this.engine.material.emissive.setHex(0x000000); this.fireTimer = 0; }
     }
   }
 }
@@ -158,7 +158,7 @@ export class ChiefBoss extends BossBase {
     this.shield = this.add(new THREE.BoxGeometry(1.1, 1.5, 0.1), mat(0x3a4a5a, { metalness: 0.7, roughness: 0.3 }), 0, -0.55, 0.25, 'shield', this.char.armL);
     this.shield.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.8, 0.02), mat(0xd62828)));
     this.shield.children[0].position.z = 0.06;
-    this.hpMax = 10; this.hp = 10; this.phase = 'guard'; this.phaseT = 0;
+    this.hpMax = 14; this.hp = 14; this.phase = 'guard'; this.phaseT = 0;
     this.char.armL.rotation.x = 0.35; this.char.armL.rotation.y = -0.3;
     this.group.position.y = -2.5; this.face();
   }
@@ -178,7 +178,7 @@ export class ChiefBoss extends BossBase {
     if (this.phase === 'guard') {
       this.char.armL.rotation.x += (0.35 - this.char.armL.rotation.x) * Math.min(1, dt * 8);
       this.fireTimer += dt;
-      const period = 2.0, ann = 0.8, ph = this.fireTimer % period;
+      const period = 1.7, ann = 0.75, ph = this.fireTimer % period;
       this.tele = ph > period - ann ? [{ pos: tip, k: (ph - (period - ann)) / ann }] : [];
       if (this.fireTimer >= period) { this.fireTimer -= period; this.shootAt(tip, 'bullet', true); this.char.play('shoot'); setTimeout(() => this.alive && this.char.play('aim'), 250); }
       if (this.phaseT > 4) { this.phase = 'throw'; this.phaseT = 0; this.tele = []; g.audio.lock(this.pan()); }
@@ -188,7 +188,7 @@ export class ChiefBoss extends BossBase {
       const ann = 1.5;
       this.tele = [{ pos: tip, k: clamp(this.phaseT / ann, 0, 1) }];
       if (this.phaseT >= ann && !this.thrown) { this.thrown = true; this.shootAt(tip, 'grenade', true); }
-      if (this.phaseT > 2.3) { this.phase = 'guard'; this.phaseT = 0; this.thrown = false; this.fireTimer = 0; }
+      if (this.phaseT > 2.0) { this.phase = 'guard'; this.phaseT = 0; this.thrown = false; this.fireTimer = 0; }
     }
     this.spawnTimer += dt;
     if (this.spawnTimer > 10 && this.minions() < 3) { this.spawnTimer = 0; g.spawnEnemy({ type: 'rusher', pos: [this.pos.x + (Math.random() < 0.5 ? -6 : 6), 0, this.pos.z + 2] }); }

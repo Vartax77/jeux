@@ -36,7 +36,15 @@ export class Audio {
 
   ok() { return this.enabled && this.ctx && this.ctx.state === 'running'; }
   // Tir du joueur : claquement + corps grave
-  shot(pan = 0)      { if (!this.ok()) return; this._noiseBurst({ pan, gain: 0.9, dur: 0.12, freq: 3000, decay: 0.05 }); this._tone({ pan, gain: 0.5, freq: 160, to: 45, dur: 0.14, type: 'square' }); }
+  // Tir 9 mm : claquement très bref et brillant, corps sec dans les médiums, coup de poing grave court, queue de réverbération courte
+  shot(pan = 0) {
+    if (!this.ok()) return;
+    this._noiseBurst({ pan, gain: 1.0, dur: 0.02, freq: 6500, q: 0.7, type: 'highpass', decay: 0.012 });   // transitoire
+    this._noiseBurst({ pan, gain: 0.8, dur: 0.06, freq: 1800, q: 1.2, type: 'bandpass', decay: 0.045 });   // crack
+    this._tone({ pan, gain: 0.55, freq: 240, to: 55, dur: 0.07, type: 'sine' });                             // punch
+    this._noiseBurst({ pan, gain: 0.35, dur: 0.28, freq: 700, q: 0.8, type: 'lowpass', decay: 0.22 });      // queue
+    this._tone({ pan, gain: 0.12, freq: 2400, to: 900, dur: 0.05, type: 'triangle' });                        // métal de culasse
+  }
   empty()            { if (!this.ok()) return; this._tone({ gain: 0.25, freq: 900, to: 700, dur: 0.05, type: 'square' }); }
   reload()           { if (!this.ok()) return; this._noiseBurst({ gain: 0.35, dur: 0.06, freq: 2500, type: 'highpass' }); setTimeout(() => this.ok() && this._tone({ gain: 0.3, freq: 520, to: 780, dur: 0.08, type: 'triangle' }), 90); }
   enemyShot(pan)     { if (!this.ok()) return; this._noiseBurst({ pan, gain: 0.5, dur: 0.18, freq: 1400, decay: 0.1 }); this._tone({ pan, gain: 0.25, freq: 120, to: 40, dur: 0.2, type: 'sawtooth' }); }

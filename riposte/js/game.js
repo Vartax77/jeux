@@ -72,19 +72,19 @@ export class Game {
   // ------------------------------------------------------------ Scène
   _initScene() {
     this.renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: true, powerPreference: 'high-performance' });
-    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.3;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 260);
     this.camBase = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
     this.hemi = new THREE.HemisphereLight(0x9cc0e8, 0x2a2118, 0.8); this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffdcb0, 1.7); this.sun.position.set(18, 26, -8); this.sun.castShadow = true;
-    const sc = this.sun.shadow; sc.mapSize.set(2048, 2048); sc.camera.near = 1; sc.camera.far = 120; sc.camera.left = -50; sc.camera.right = 50; sc.camera.top = 50; sc.camera.bottom = -50; sc.bias = -0.0008;
+    const sc = this.sun.shadow; sc.mapSize.set(1536, 1536); sc.camera.near = 1; sc.camera.far = 120; sc.camera.left = -50; sc.camera.right = 50; sc.camera.top = 50; sc.camera.bottom = -50; sc.bias = -0.0008;
     this.scene.add(this.sun); this.scene.add(this.sun.target);
     // Contre-jour froid : détache les silhouettes du décor
     this.rim = new THREE.DirectionalLight(0x7fb4ff, 1.2); this.scene.add(this.rim); this.scene.add(this.rim.target);
     // Lumière d'appoint côté joueur (comble les faces sombres)
-    this.fill = new THREE.PointLight(0xffe4c0, 30, 40, 1.4); this.scene.add(this.fill);
+    this.fill = new THREE.PointLight(0xffe4c0, 8, 30, 1.2); this.scene.add(this.fill);
     this.sparkMax = 700;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(this.sparkMax * 3), 3));
@@ -127,8 +127,8 @@ export class Game {
           if (t !== 'hangar') { const mat = A.material('metal', 0x555a66); this._box(0.18, 5.5, 0.18, mat, lx, 2.75, lz, { shadow: false }); this._box(1.2, 0.12, 0.3, mat, lx - side * 0.5, 5.5, lz, { shadow: false }); const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe8b0 })); bulb.position.set(lx - side * 1.0, 5.4, lz); this.env.add(bulb); }
           const pl = new THREE.PointLight(0xffe0a0, t === 'hangar' ? 60 : 90, 26, 1.6); pl.position.set(lx - side * 1.0, t === 'hangar' ? 6.5 : 5.3, lz); this.env.add(pl);
       } }
-      const c = p.clone().add(dir.clone().multiplyScalar(1.7));
-      if (pt.cover === 'car') this._car(c.x, c.z, Math.atan2(dir.x, dir.z) + Math.PI / 2, 0x8a2a2a);
+      const c = p.clone().add(dir.clone().multiplyScalar(pt.cover === 'car' ? 2.6 : 1.9));
+      if (pt.cover === 'car') this._car(c.x, c.z, Math.atan2(dir.x, dir.z) + Math.PI / 2, 0x8a2a2a, true);
       else this._box(2.2, 1.15, 0.9, A.material('metal', 0x8a6a3a, [2, 1]), c.x, 0.575, c.z).lookAt(p.x, 0.575, p.z);
       for (const w of pt.waves) for (const e of w.enemies) {
         const ep = new THREE.Vector3(...e.pos), toCam = p.clone().sub(ep).setY(0).normalize();
@@ -149,10 +149,10 @@ export class Game {
       for (let k = 0; k < 6; k++) { const win = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.9), new THREE.MeshBasicMaterial({ color: Math.random() < 0.6 ? 0xffd27a : 0x334455 })); win.position.set(side > 0 ? -w / 2 - 0.02 : w / 2 + 0.02, rnd(1, h - 1) - h / 2, rnd(-d / 2 + 1, d / 2 - 1)); win.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2; m.add(win); }
     }
   }
-  _car(x, z, rotY, color) {
+  _car(x, z, rotY, color, low = false) {
     const A = this.assets, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rotY; this.env.add(g);
-    const body = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.7, 1.9), new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.5 })); body.position.y = 0.65; body.castShadow = true; g.add(body); this.envMeshes.push(body);
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.6, 1.7), new THREE.MeshStandardMaterial({ color: 0x9bc4e8, roughness: 0.2, metalness: 0.2 })); cab.position.set(-0.2, 1.3, 0); cab.castShadow = true; g.add(cab); this.envMeshes.push(cab);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.6, 1.9), new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.4 })); body.position.y = 0.55; body.castShadow = true; g.add(body); this.envMeshes.push(body);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.2, low ? 0.35 : 0.55, 1.7), new THREE.MeshStandardMaterial({ color: 0x3a5a7a, roughness: 0.3, metalness: 0.3 })); cab.position.set(-0.2, low ? 1.02 : 1.12, 0); cab.castShadow = true; g.add(cab); this.envMeshes.push(cab);
     for (const [wx, wz] of [[-1.4, -0.95], [1.4, -0.95], [-1.4, 0.95], [1.4, 0.95]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.25, 12), A.material('metal', 0x1a1a1a)); w.rotation.x = Math.PI / 2; w.position.set(wx, 0.33, wz); g.add(w); }
     return g;
   }
@@ -170,7 +170,7 @@ export class Game {
     for (const side of [-1, 1]) {
       for (let z = 4; z > -90; z -= 12) {
         const h = rnd(9, 14), m = this._box(6, h, 12, A.material('brick', side < 0 ? 0x5a3f36 : 0x4a4a55, [2, 4]), side * 13, h / 2, z - 6);
-        for (let k = 0; k < 4; k++) for (const y of [2.2, 5.5, 8.5]) { if (y > h - 1) continue; const w = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.6), new THREE.MeshBasicMaterial({ color: Math.random() < 0.5 ? 0xffd27a : 0x22303a })); w.position.set(side * -3.02, y - h / 2, -4.5 + k * 3); w.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2; m.add(w); }
+        for (let k = 0; k < 3; k++) for (const y of [2.2, 5.5, 8.5]) { if (y > h - 1) continue; const w = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.6), new THREE.MeshBasicMaterial({ color: Math.random() < 0.5 ? 0xffd27a : 0x22303a })); w.position.set(side * -3.02, y - h / 2, -4.5 + k * 3); w.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2; m.add(w); }
       }
       for (let z = -2; z > -80; z -= 14) this._box(0.25, 5, 0.25, A.material('metal', 0x555a66), side * 9, 2.5, z, { shadow: false });
     }
@@ -184,7 +184,7 @@ export class Game {
     this._box(30, 0.5, 100, wall, 0, 9.5, -40, { shadow: false });
     this._box(30, 10, 0.5, wall, 0, 5, -80);
     for (const side of [-1, 1]) { this._box(3.2, 0.3, 96, steel, side * 11.4, 3.85, -40); this._box(0.08, 1.0, 96, steel, side * 9.85, 4.5, -40, { shadow: false }); for (let z = 0; z > -80; z -= 8) this._box(0.2, 4, 0.2, steel, side * 12.9, 2, z - 2); }
-    for (let z = -6; z > -78; z -= 12) for (const side of [-1, 1]) { const l = new THREE.SpotLight(0xfff0d0, 40, 30, 0.6, 0.5, 1.2); l.position.set(side * 8, 9, z); l.target.position.set(side * 3, 0, z - 4); this.env.add(l); this.env.add(l.target); const cone = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.6, 10), new THREE.MeshBasicMaterial({ color: 0xfff0d0 })); cone.position.copy(l.position); this.env.add(cone); }
+    for (let z = -6; z > -78; z -= 16) for (const side of [-1, 1]) { const l = new THREE.SpotLight(0xfff0d0, 40, 30, 0.6, 0.5, 1.2); l.position.set(side * 8, 9, z); l.target.position.set(side * 3, 0, z - 4); this.env.add(l); this.env.add(l.target); const cone = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.6, 10), new THREE.MeshBasicMaterial({ color: 0xfff0d0 })); cone.position.copy(l.position); this.env.add(cone); }
     for (let i = 0; i < 8; i++) this._box(1.2, 1.2, 1.2, A.material('metal', 0x6a5a3a), rnd(-8, 8) + (i % 2 ? 6 : -6), 0.6, -rnd(8, 74));
   }
 
@@ -357,7 +357,8 @@ export class Game {
     this.sun.target.position.copy(this.camBase.pos).add(new THREE.Vector3(0, 0, -12)); this.sun.position.copy(this.sun.target.position).add(new THREE.Vector3(14, 22, 16));
     const fwd = this.camBase.look.clone().sub(this.camBase.pos).setY(0).normalize();
     this.rim.target.position.copy(this.camBase.pos); this.rim.position.copy(this.camBase.pos).addScaledVector(fwd, 40).add(new THREE.Vector3(-10, 18, 0));
-    this.fill.position.copy(this.camBase.pos).add(new THREE.Vector3(0, 2.5, 0)).addScaledVector(fwd, -1.5);
+    this.fill.position.copy(this.camBase.pos).add(new THREE.Vector3(0, 3.5, 0)).addScaledVector(fwd, 4);
+    this._cullLights();
     this.renderer.render(this.scene, this.camera);
     this.draw2D(); this.updateHud();
   }
@@ -402,6 +403,13 @@ export class Game {
     const pos = this.camBase.pos.clone(); pos.y -= SET.duckDepth * this.duck; pos.x += (Math.random() - 0.5) * s; pos.y += (Math.random() - 0.5) * s;
     const look = this.camBase.look.clone(); look.y -= (SET.duckDepth + 0.5) * this.duck;
     this.camera.position.copy(pos); this.camera.lookAt(look);
+  }
+
+  // Éteint les lumières ponctuelles/projecteurs à plus de 34 m de la caméra (coût GPU par lumière)
+  _cullLights() {
+    if (!this.env) return;
+    const c = this.camBase.pos;
+    for (const o of this.env.children) if (o.isPointLight || o.isSpotLight) o.visible = o.position.distanceTo(c) < 34;
   }
 
   // ------------------------------------------------------------ Particules

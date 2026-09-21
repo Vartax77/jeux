@@ -38,10 +38,16 @@ export class Net {
 
   // ---------- Hôte ----------
   start() {
-    this.code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('') + (10 + Math.random() * 90 | 0);
+    // Le code est conservé dans l'onglet : un F5 garde la même salle et les téléphones se reconnectent seuls
+    let saved = null; try { saved = sessionStorage.getItem('riposte-code'); } catch (_) {}
+    this.code = saved || (Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('') + (10 + Math.random() * 90 | 0));
+    try { sessionStorage.setItem('riposte-code', this.code); } catch (_) {}
     this.telUrl = new URL('tel.html?c=' + this.code, location.href).href;
     this.peer = new Peer('riposte-' + this.code, { debug: 1 });
-    this.peer.on('error', e => this.onEvent('error', null, e));
+    this.peer.on('error', e => {
+      if (e.type === 'unavailable-id') { try { sessionStorage.removeItem('riposte-code'); } catch (_) {} this.onEvent('error', null, { type: 'code déjà utilisé, rechargez la page (F5)' }); return; }
+      this.onEvent('error', null, e);
+    });
     this.peer.on('disconnected', () => { try { this.peer.reconnect(); } catch (_) {} });
     this.peer.on('connection', conn => this._accept(conn));
     setInterval(() => this.forEach(p => { if (!p.local) this.send(p, { t: 'ping', ts: performance.now() }); }), 1000);
