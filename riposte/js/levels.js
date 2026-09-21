@@ -6,7 +6,7 @@
 const G = 'grunt', R = 'red', Y = 'yellow', GR = 'grenadier', RU = 'rusher';
 const e = (type, x, y, z, delay = 0) => ({ type, pos: [x, y, z], delay });
 
-export const LEVELS = [
+const RAW = [
   // ============================================================ ZONE 1 — LES DOCKS
   { id: 'docks', name: 'ZONE 1 — LES DOCKS', intro: 'Un cargo détourné. Les mercenaires tiennent le quai. Reprenez-le.',
     theme: 'docks', timePerPoint: 40, ammo: 8, lives: 3,
@@ -81,3 +81,15 @@ export const LEVELS = [
         boss: { type: 'chief', pos: [0, 0, -58], time: 120 } },
     ] },
 ];
+
+// Rapproche les ennemis de la caméra (Time Crisis joue à 4–10 m, pas à 20) : positions ramenées vers le point de rail.
+// y conservé (fenêtres, passerelles). Distance minimale 5 m pour ne pas coller au couvert.
+const NEAR = 0.6, MIN = 5;
+function pull(pt, pos, k) {
+  const dx = pos[0] - pt[0], dz = pos[2] - pt[2], d = Math.hypot(dx, dz) || 1;
+  const nd = Math.max(MIN, d * k);
+  return [pt[0] + dx / d * nd, pos[1], pt[2] + dz / d * nd];
+}
+export const LEVELS = RAW.map(L => ({ ...L, points: L.points.map(pt => ({ ...pt,
+  waves: pt.waves.map(w => ({ ...w, enemies: w.enemies.map(e => ({ ...e, pos: pull(pt.pos, e.pos, NEAR) })), events: (w.events || []).map(ev => ({ ...ev, pos: pull(pt.pos, ev.pos, NEAR) })) })),
+  boss: pt.boss ? { ...pt.boss, pos: pull(pt.pos, pt.boss.pos, 0.7) } : undefined })) }));

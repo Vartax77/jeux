@@ -72,9 +72,29 @@ export class Assets {
   }
 
   // Matériau texturé si la texture existe, sinon couleur unie
+  // Texture de bruit générée (grain + rayures) pour casser l'uniformité des surfaces sans fichier
+  noiseTexture(kind = 'grain') {
+    this._noise = this._noise || {};
+    if (this._noise[kind]) return this._noise[kind];
+    try {
+      const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d');
+      c.fillStyle = '#9a9a9a'; c.fillRect(0, 0, S, S);
+      const img = c.getImageData(0, 0, S, S), d = img.data;
+      for (let i = 0; i < d.length; i += 4) { const v = 135 + Math.random() * 50 + (kind === 'plates' && ((i / 4 / S | 0) % 64 < 2 || ((i / 4) % S) % 64 < 2) ? -60 : 0); d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+      c.putImageData(img, 0, 0);
+      if (kind === 'grain') { c.globalAlpha = 0.25; c.fillStyle = '#000'; for (let k = 0; k < 40; k++) c.fillRect(Math.random() * S, Math.random() * S, Math.random() * 40, 1 + Math.random() * 2); }
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+      this._noise[kind] = t; return t;
+    } catch (_) { return null; }
+  }
   material(texName, color, repeat = [1, 1], extra = {}) {
     const t = this.textures[texName];
-    if (!t) return new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.1, ...extra });
+    if (!t) {
+      const n = this.noiseTexture(texName === 'metal' || texName === 'container' ? 'plates' : 'grain');
+      if (!n) return new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.1, ...extra });
+      const map = n.clone(); map.needsUpdate = true; map.repeat.set(repeat[0] * 2, repeat[1] * 2);
+      return new THREE.MeshStandardMaterial({ map, color: new THREE.Color(color).multiplyScalar(1.6), roughness: 0.85, metalness: 0.1, ...extra });
+    }
     const map = t.clone(); map.needsUpdate = true; map.repeat.set(repeat[0], repeat[1]);
     return new THREE.MeshStandardMaterial({ map, color: 0xffffff, roughness: 0.85, metalness: 0.1, ...extra });
   }

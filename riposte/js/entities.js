@@ -31,6 +31,8 @@ export class Enemy {
     // Halo d'annonce
     this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xff3030, transparent: true, opacity: 0, depthWrite: false }));
     this.glow.scale.set(0.001, 0.001, 1); game.scene.add(this.glow);
+    this.blob = new THREE.Mesh(new THREE.CircleGeometry(0.45, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }));
+    this.blob.rotation.x = -Math.PI / 2; this.blob.position.y = 0.015; this.group.add(this.blob);
     game.scene.add(this.group);
     this.face();
   }
