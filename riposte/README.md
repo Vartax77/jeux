@@ -5,7 +5,7 @@ Tout est statique (GitHub Pages, dépôt `jeux`, dossier `riposte/`). Liaison Pe
 ## Lancer
 1. PC : ouvrir `https://<utilisateur>.github.io/jeux/riposte/` — un code à 6 caractères s'affiche.
 2. iPhone (Safari) : ouvrir `.../jeux/riposte/tel.html`, saisir le code, « Connecter », accepter l'accès aux capteurs.
-3. Tenir l'iPhone comme une télécommande (haut vers l'écran). Viser le centre de l'écran et appuyer « Recentrer ».
+3. Tenir l'iPhone à plat, le haut de l'appareil vers l'écran. Viser le centre de l'écran et appuyer « Recentrer ».
 
 > HTTPS obligatoire : iOS refuse l'accès au gyroscope sur une page en `http://`. Tester donc sur GitHub Pages, pas sur un serveur local en http.
 

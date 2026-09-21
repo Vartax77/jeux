@@ -13,7 +13,7 @@
   input { font-size:34px; letter-spacing:.2em; text-align:center; text-transform:uppercase; padding:14px; border-radius:12px; border:1px solid #2a3140; background:#121722; color:var(--fg); font-family:ui-monospace,Menlo,monospace; }
   button { font-size:22px; padding:18px; border-radius:14px; border:none; background:#e8ecf3; color:#0b0e14; font-weight:700; }
   .small { color:var(--dim); font-size:14px; text-align:center; }
-  #pad { display:none; height:100%; flex-direction:column; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom); box-sizing:border-box; }
+  #pad { display:none; height:100%; height:100dvh; flex-direction:column; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom); box-sizing:border-box; }
   #status { text-align:center; padding:10px; font-size:14px; color:var(--dim); }
   #center { margin:0 16px; padding:16px; border-radius:14px; background:#1a2130; color:var(--fg); font-size:18px; font-weight:600; text-align:center; }
   #fire { flex:1; margin:14px 16px; border-radius:22px; background:radial-gradient(circle at 50% 45%, #2a1212, #140a0a); border:2px solid #7a2a2a;
@@ -26,7 +26,7 @@
 </head>
 <body>
 <div id="login">
-  <div class="small">Tenez l'iPhone comme une télécommande, le haut vers l'écran du PC.</div>
+  <div class="small">Tenez l'iPhone à plat ou légèrement incliné, le haut de l'appareil pointé vers l'écran du PC. Le bouton « Recentrer » fixe la position de repos.</div>
   <input id="code" placeholder="CODE" maxlength="6" autocomplete="off" autocapitalize="characters">
   <button id="go">Connecter</button>
   <div id="err"></div>
@@ -42,17 +42,30 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
+  // Safari iOS ignore user-scalable=no : on bloque le pincement (2 doigts = TIRER + COUVRIR) et le double-tap.
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+  document.addEventListener('touchmove', e => { if (e.touches.length > 1 || e.scale !== undefined && e.scale !== 1) e.preventDefault(); }, { passive: false });
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', e => { const t = Date.now(); if (t - lastTouchEnd < 350) e.preventDefault(); lastTouchEnd = t; }, { passive: false });
   const params = new URLSearchParams(location.search);
   if (params.get('c')) $('code').value = params.get('c').toUpperCase();
 
   let conn = null, n = 0;
   let yaw = 0, pitch = 0, dirty = false;
 
-  // Orientation : téléphone tenu comme une télécommande (haut vers l'écran).
-  // Avec la convention W3C, le vecteur "haut du téléphone" donne yaw = -alpha et pitch = beta. Le roulis (gamma) est ignoré.
+  // Visée = direction du HAUT du téléphone (axe +Y de l'appareil), quelle que soit la façon de le tenir :
+  // à plat, incliné ou vertical. On passe par la matrice de rotation W3C (Z-X'-Y'') pour rester juste
+  // même quand alpha/gamma se dégradent près de la verticale. Le roulis autour de cet axe n'influence pas la visée.
+  const D = Math.PI / 180;
   function onOrient(e) {
-    if (e.alpha === null) return;
-    yaw = -e.alpha; pitch = e.beta; dirty = true;
+    if (e.alpha === null || e.beta === null) return;
+    const a = e.alpha * D, b = e.beta * D, g = e.gamma * D;
+    const cA = Math.cos(a), sA = Math.sin(a), cB = Math.cos(b), sB = Math.sin(b), cG = Math.cos(g), sG = Math.sin(g);
+    // 2e colonne de la matrice de rotation = axe +Y de l'appareil exprimé dans le repère du monde (x est, y nord, z haut)
+    const fx = -cB * sA, fy = cA * cB, fz = sB;
+    yaw = Math.atan2(fx, fy) / D;            // cap horizontal, degrés
+    pitch = Math.asin(Math.max(-1, Math.min(1, fz))) / D;   // élévation, degrés
+    dirty = true; void cG; void sG;
   }
   function loop() {
     if (conn && conn.open && dirty) { conn.send({ t: 'a', y: yaw, p: pitch }); dirty = false; }
