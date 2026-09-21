@@ -91,8 +91,20 @@ export class RigCharacter {
     this.play('idle');
   }
   colorize(color) {
+    // Ne dépend pas des matériaux du FBX (textures embarquées parfois absentes → maillage noir) :
+    // matériau standard uniforme, teinté par type, la texture d'origine gardée si elle a été chargée.
     const c = new THREE.Color(color);
-    this.model.traverse(o => { if (o.isMesh || o.isSkinnedMesh) { const ms = Array.isArray(o.material) ? o.material : [o.material]; o.material = ms.map(m => { const n = m.clone(); n.color = n.color ? n.color.clone().lerp(c, 0.55) : c; return n; }); if (!Array.isArray(o.material)) o.material = o.material[0]; } });
+    this.model.traverse(o => {
+      if (!(o.isMesh || o.isSkinnedMesh)) return;
+      const ms = Array.isArray(o.material) ? o.material : [o.material];
+      const out = ms.map(m => {
+        const map = m && m.map && m.map.image ? m.map : null;
+        const isSkin = /head|face|skin|hand/i.test(o.name + ' ' + (m && m.name || ''));
+        return new THREE.MeshStandardMaterial({ map, color: isSkin && !map ? 0xd9b48a : (map ? 0xffffff : 0xb8bcc4).valueOf(), roughness: 0.75, metalness: 0.05, side: THREE.DoubleSide, skinning: true });
+      });
+      out.forEach((m, i) => { if (!(/head|face|skin|hand/i.test(o.name + ' ' + (ms[i] && ms[i].name || '')))) m.color.lerp(c, map ? 0.35 : 0.65); });
+      o.material = Array.isArray(o.material) ? out : out[0];
+    });
   }
   hasAnim(name) { return !!this.actions[name]; }
   gunTip() { const b = this.bones.RightHand || this.bones.RightForeArm; return b ? b.getWorldPosition(new THREE.Vector3()) : this.group.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 1.3, 0)); }

@@ -38,7 +38,7 @@ export class Game {
     this.assets.load(k => { $('load').textContent = 'Ressources : ' + Math.round(k * 100) + ' %'; }).then(() => {
       this.state = 'lobby';
       $('load').textContent = 'Ressources : ' + (this.assets.hasRig ? 'personnage Mixamo chargé' : 'personnages procéduraux') + ' · ' + Object.keys(this.assets.textures).length + ' texture(s) · ' + Object.keys(this.assets.backdrops).length + ' fond(s)';
-      console.log(this.assets.report.join('\n'));
+      console.log(this.assets.report.join('\n')); $('load').title = this.assets.report.join('\n');
       this.buildTheme(this.level);
     });
   }
