@@ -26,10 +26,11 @@ export class OneEuro {
 const wrap = d => ((d + 540) % 360) - 180;
 
 export class Net {
-  constructor({ maxPlayers = 2, fovX = 40, autoCenter = true, onEvent = () => {} } = {}) {
+  constructor({ maxPlayers = 2, fovX = 40, autoCenter = 'soft', onEvent = () => {} } = {}) {
     this.maxPlayers = maxPlayers;
     this.fovX = fovX;                 // degrés couverts par la largeur de l'écran
-    this.autoCenter = autoCenter;     // recentrage à la sortie de couvert
+    this.autoCenter = autoCenter;     // recentrage à la sortie de couvert : 'soft' | 'hard' | 'off'
+    this.softThreshold = 20;          // degrés de mouvement pendant le couvert au-delà desquels on recentre (mode soft)
     this.onEvent = onEvent;           // (type, player, data)
     this.players = Array(maxPlayers).fill(null);
     this.code = null; this.telUrl = null; this.peer = null;
@@ -91,7 +92,12 @@ export class Net {
   setCover(p, on) {
     if (p.cover === on) return;
     p.cover = on;
-    if (!on && this.autoCenter && !p.local) this.center(p);
+    if (on) { p.yawC = p.yaw; p.pitchC = p.pitch; }
+    else if (!p.local && this.autoCenter === 'hard') this.center(p);
+    else if (!p.local && this.autoCenter === 'soft' && p.yawC !== undefined) {
+      const moved = Math.max(Math.abs(wrap(p.yaw - p.yawC)), Math.abs(p.pitch - p.pitchC));
+      if (moved > this.softThreshold) this.center(p);
+    }
     this.onEvent('cover', p, on);
   }
 

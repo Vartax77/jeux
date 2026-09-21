@@ -23,12 +23,12 @@ Tout est statique (GitHub Pages, dépôt `jeux`, dossier `riposte/`). Liaison Pe
 - Game over : TIRER = continue (reprise au point courant, vies pleines).
 
 ## Touches PC
-`+` / `−` sensibilité · `R` recentrage auto à la sortie de couvert · `K` joueur clavier/souris · `M` son · `L` panneau lobby.
+`+` / `−` sensibilité · `R` recentrage à la sortie de couvert (doux / fort / non) · `K` joueur clavier/souris · `M` son · `L` panneau lobby.
 
 ## Lot 2 — checklist de validation
 - [ ] Le QR code connecte l'iPhone ; TIRER lance la partie ; bandeau « ZONE 1 » puis « ACTION ! ».
 - [ ] Le réticule est stable main immobile et suit sans retard main rapide (filtre 1 €).
-- [ ] Sortir de couvert recentre le réticule (désactivable avec R).
+- [ ] Recentrage doux : sortir de couvert sans avoir bougé le pistolet ne fait pas sauter le réticule ; après l'avoir baissé/relevé (> 20°), il revient au centre. R change le mode (doux / fort / non).
 - [ ] Tirer sur un ennemi le fait tomber ; tête = son aigu et ×2 ; jambes = à genoux.
 - [ ] L'anneau rouge apparaît avant chaque tir ennemi ; se couvrir évite la balle (bruit de passage) ; ne pas se couvrir = vignette rouge, vie en moins, téléphone qui flashe.
 - [ ] Une balle ennemie en vol peut être abattue.

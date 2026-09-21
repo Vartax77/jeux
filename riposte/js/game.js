@@ -16,6 +16,7 @@ const CFG = {
   yellowBonus: 5,         // secondes gagnées par ennemi jaune
 };
 const COLORS = ['#ff4d4d', '#4da6ff'];
+const AUTOC = { soft: 'doux (si le pistolet a bougé de plus de 20°)', hard: 'fort (toujours)', off: 'non' };
 
 const TYPES = {
   grunt:     { color: 0x7c8593, hp: 1, fireChance: 0.55, cooldown: [1.4, 2.6], accuracy: 0.45, telegraph: 1.0, score: 100 },
@@ -35,7 +36,7 @@ export class Game {
   constructor() {
     this.level = LEVEL1;
     this.audio = new Audio();
-    this.net = new Net({ fovX: CFG.fovX, autoCenter: true, onEvent: (t, p, d) => this.onNet(t, p, d) });
+    this.net = new Net({ fovX: CFG.fovX, autoCenter: 'soft', onEvent: (t, p, d) => this.onNet(t, p, d) });
     this.state = 'lobby';
     this.timeScale = 1; this.slowmoLeft = 0;
     this.enemies = []; this.bullets = []; this.sparks = [];
@@ -68,8 +69,8 @@ export class Game {
       if (k === 'm') { this.audio.enabled = !this.audio.enabled; this.setBanner(this.audio.enabled ? 'Son activé' : 'Son coupé', 1.2); }
       if (e.key === '+' || e.key === '=') this.net.fovX = clamp(this.net.fovX + 2, 10, 90);
       if (e.key === '-') this.net.fovX = clamp(this.net.fovX - 2, 10, 90);
-      if (k === 'r') this.net.autoCenter = !this.net.autoCenter;
-      $('fov').textContent = this.net.fovX; $('autoc').textContent = this.net.autoCenter ? 'oui' : 'non';
+      if (k === 'r') { const modes = ['soft', 'hard', 'off']; this.net.autoCenter = modes[(modes.indexOf(this.net.autoCenter) + 1) % 3]; this.setBanner('Recentrage à la sortie de couvert : ' + AUTOC[this.net.autoCenter], 1.5); }
+      $('fov').textContent = this.net.fovX; $('autoc').textContent = AUTOC[this.net.autoCenter];
     });
     addEventListener('resize', () => this._resize());
   }
