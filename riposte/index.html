@@ -24,7 +24,13 @@
 <div id="hud">
   <div id="lobby">
     <div class="small">Sur chaque iPhone, ouvrir <b>tel.html</b> et saisir ce code :</div>
-    <div id="code">······</div>
+    <div style="display:flex;gap:18px;align-items:center">
+      <div id="qr" style="background:#fff;padding:8px;border-radius:8px;line-height:0"></div>
+      <div>
+        <div id="code">······</div>
+        <div class="small">ou scanner le QR code avec l'appareil photo de l'iPhone</div>
+      </div>
+    </div>
     <div id="url" class="small"></div>
     <div>
       <span class="p"><span class="dot" id="d1"></span>Joueur 1 <span class="small" id="s1">en attente</span></span>
@@ -36,6 +42,7 @@
   <div id="err"></div>
 </div>
 <script src="lib/peerjs.min.js"></script>
+<script src="lib/qrcode.js"></script>
 <script>
 (() => {
   // ---------- Réglages ----------
@@ -110,7 +117,9 @@
   const code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('')
              + (10 + Math.random() * 90 | 0);
   $('code').textContent = code;
-  $('url').textContent = location.href.replace(/index\.html.*$|\/?(\?.*)?$/, '/tel.html?c=' + code).replace('//tel', '/tel');
+  const telUrl = new URL('tel.html?c=' + code, location.href).href;
+  $('url').textContent = telUrl;
+  try { const q = qrcode(0, 'M'); q.addData(telUrl); q.make(); $('qr').innerHTML = q.createSvgTag({ cellSize: 4, margin: 0 }); } catch (e) { console.warn('QR', e); }
 
   const peer = new Peer('riposte-' + code, { debug: 1 });
   peer.on('error', e => { const el = $('err'); el.style.display = 'block'; el.textContent = 'Erreur réseau : ' + e.type; });
@@ -134,8 +143,9 @@
         case 'pong': p.ping = Math.round(performance.now() - m.ts); break;
       }
     });
-    const bye = () => { players[slot] = null; setStatus(slot, 'déconnecté', '#333'); };
-    conn.on('close', bye); conn.on('error', bye);
+    conn.on('close', () => { players[slot] = null; setStatus(slot, 'déconnecté', '#333'); });
+    conn.on('error', e => { console.warn('J' + (slot + 1), e); setStatus(slot, 'erreur : ' + (e.type || e), '#a33'); });
+    conn.on('iceStateChanged', st => console.log('J' + (slot + 1) + ' ICE ' + st));
   });
   function setStatus(slot, txt, color) { $('s' + (slot + 1)).textContent = txt; $('d' + (slot + 1)).style.background = color; }
   setInterval(() => { for (const p of players) if (p && p.ready) p.conn.send({ t: 'ping', ts: performance.now() }); }, 1000);

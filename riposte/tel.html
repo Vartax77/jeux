@@ -76,21 +76,39 @@
     connect(code);
   });
 
+  let peer = null, loopStarted = false, stop = false, lastReason = '';
+  const setStatus = t => { $('status').textContent = t; };
+
   function connect(code) {
-    const peer = new Peer({ debug: 1 });
-    peer.on('open', () => {
-      conn = peer.connect('riposte-' + code, { serialization: 'json' });
-      conn.on('open', () => { $('login').style.display = 'none'; $('pad').style.display = 'flex'; $('status').textContent = 'connecté'; loop(); });
-      conn.on('data', m => {
-        if (m.t === 'hello') { n = m.n; $('status').textContent = 'Joueur ' + n + ' · connecté'; $('pad').style.background = n === 1 ? '#150b0b' : '#0b1220'; }
-        if (m.t === 'ping') conn.send({ t: 'pong', ts: m.ts });
-        if (m.t === 'full') $('err').textContent = 'Salle pleine (2 joueurs max).';
-      });
-      conn.on('close', () => { $('status').textContent = 'déconnecté — rechargez la page'; });
-      conn.on('error', e => { $('err').textContent = 'Erreur : ' + e; });
-    });
+    peer = new Peer({ debug: 2 });
+    peer.on('open', () => openConn(code));
+    peer.on('disconnected', () => { if (!stop) peer.reconnect(); });   // perte du serveur de signalisation : on s'y rattache
     peer.on('error', e => {
-      $('err').textContent = e.type === 'peer-unavailable' ? 'Aucune salle avec ce code. Vérifiez le code sur l\'écran du PC.' : 'Erreur réseau : ' + e.type;
+      if (e.type === 'peer-unavailable') { $('err').textContent = 'Aucune salle avec ce code. Vérifiez le code sur l\'écran du PC.'; setStatus('salle introuvable'); return; }
+      $('err').textContent = 'Erreur réseau : ' + e.type; setStatus('erreur : ' + e.type);
+    });
+  }
+
+  function openConn(code) {
+    if (stop) return;
+    setStatus('connexion…');
+    conn = peer.connect('riposte-' + code, { serialization: 'json', reliable: true });
+    conn.on('open', () => {
+      $('login').style.display = 'none'; $('pad').style.display = 'flex';
+      setStatus(n ? 'Joueur ' + n + ' · connecté' : 'connecté');
+      if (!loopStarted) { loopStarted = true; loop(); }
+    });
+    conn.on('data', m => {
+      if (m.t === 'hello') { n = m.n; setStatus('Joueur ' + n + ' · connecté'); $('pad').style.background = n === 1 ? '#150b0b' : '#0b1220'; }
+      if (m.t === 'ping') conn.send({ t: 'pong', ts: m.ts });
+      if (m.t === 'full') { stop = true; $('err').textContent = 'Salle pleine (2 joueurs max).'; setStatus('salle pleine'); }
+    });
+    conn.on('iceStateChanged', st => { lastReason = 'ICE ' + st; console.log(lastReason); });
+    conn.on('error', e => { lastReason = (e.type || '') + ' ' + (e.message || e); console.warn(e); });
+    conn.on('close', () => {
+      if (stop) return;
+      setStatus('déconnecté (' + (lastReason || 'fermé par le PC') + ') — reconnexion…');
+      setTimeout(() => { if (peer.disconnected) peer.reconnect(); openConn(code); }, 1500);
     });
   }
 
