@@ -135,7 +135,12 @@ export class Game {
     this.sun.color.setHex({ docks: 0xffd8a8, street: 0xffc890, hangar: 0xe8f0ff }[t]); this.sun.intensity = t === 'hangar' ? 1.4 : 2.6;
     // Fond panoramique lointain (texture si fournie, sinon ligne d'horizon peinte)
     const back = A.backdrops[t];
-    if (back) { const cyl = new THREE.Mesh(new THREE.CylinderGeometry(120, 120, 60, 48, 1, true), new THREE.MeshBasicMaterial({ map: back, side: THREE.BackSide, fog: false })); cyl.position.set(7, 18, -30); this.env.add(cyl); }
+    if (back) {
+      // Le cylindre fait 754 m de tour pour 60 m de haut (12,6:1) : on répète l'image autant de fois qu'il faut pour garder ses proportions
+      const img = back.image, aspect = img && img.width ? img.width / img.height : 4;
+      const map = back.clone(); map.needsUpdate = true; map.repeat.set(Math.max(1, Math.round(12.6 / aspect)), 1);
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(120, 120, 60, 48, 1, true), new THREE.MeshBasicMaterial({ map, side: THREE.BackSide, fog: false })); cyl.position.set(7, 18, -30); this.env.add(cyl);
+    }
     else this._paintedSkyline(t);
     const groundMat = A.material(t === 'hangar' ? 'concrete' : t === 'street' ? 'asphalt' : 'ground', { docks: 0x2b3038, street: 0x24262b, hangar: 0x3a3c40 }[t], [40, 40]);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), groundMat); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; this.env.add(ground); this.envMeshes.push(ground);
