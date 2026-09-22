@@ -16,6 +16,7 @@ Jeu de bowling façon Wii Sports : la partie se joue sur l'écran du PC, les iPh
 
 ## 1 bis. Journal des versions
 
+- **V1.11** (évolutions, lot A) : la **visée revient au centre** à chaque nouveau tour (réglage Règles → « Recentrer la visée ») ; tirets de visée fins, de largeur constante, partant de la boule ; **trace fantôme du dernier lancer** affichée pendant la préparation, dans la couleur du lanceur (Règles → « Afficher la trace ») ; **zoom de la caméra de préparation** — molette de la souris, touches + / −, boutons − / + de la manette — et **vue du dessus** (touche T ou bouton « vue » de la manette) ; recul et hauteur dans Caméras ; **bandeau « Nouvelle version prête — Recharger »** quand une mise à jour est arrivée (fin du « recharge deux fois »).
 - **V1.10** : ligne de visée lisible — tirets larges avec liseré sombre (ils grossissent avec la distance pour compenser la perspective) jusqu'au deck, et une **cible** posée à la hauteur de la quille 1 là où la boule arriverait en ligne droite ; réglage Affichage → « Ligne de visée » (complète / courte / aucune).
 - **V1.9** : correction du lift qui partait toujours du même côté. Cause : la torsion était mesurée autour d'un axe fixe du téléphone ; selon la prise, le balancier lui-même tournait autour de cet axe et noyait le mouvement du poignet. Le calibrage gauche/droite enregistre maintenant la rotation sur les trois axes et retient celui où les deux lancers tournent en sens opposés (l'axe du poignet, jamais celui du balancier) ; cet axe est mémorisé par joueur (`axeEffet`) et utilisé en jeu. Les événements du banc affichent les trois rotations pour comprendre un refus.
 - **V1.8** : calibrage du lift en **gauche / droite** (au lieu de droit / tourné) : détecte le sens de l'effet par joueur, cale le plein effet sur le côté le plus faible, refuse un calibrage incohérent.
@@ -85,6 +86,7 @@ Pour tester seul avec un téléphone et le clavier : coche « Le clavier peut la
 - **Espace maintenu** : la jauge de puissance monte et redescend (1,6 s l'aller-retour) ; **← →** pendant l'appui règlent l'effet ; **relâcher** lance.
 - **L** : le prochain lancer sera lobé ; **B** : en arrière (gags du cahier des charges, pour les vérifier sans téléphone).
 - **Espace** ou **Entrée** hors préparation : passer la cinématique (roulement compris : la simulation se termine instantanément et compte).
+- **Molette**, **+ / −** : zoom de la caméra en préparation. **T** : vue du dessus pour viser.
 - **V** : caméra libre (souris pour tourner, molette pour zoomer, V pour revenir). **F** : plein écran. **H** : aide. **C** : banc. **Échap** : réglages.
 
 ### Calibrer un joueur (puissance et lift)

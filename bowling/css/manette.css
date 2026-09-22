@@ -79,3 +79,5 @@ output { text-align: center; font-variant-numeric: tabular-nums; font-size: 16px
   .zone-lancer { min-height: 120px; margin: 0 24px 6px; }
   .zone-lancer #zl-titre { font-size: 28px; }
 }
+
+.fleche.vue { width: auto; padding: 0 12px; font-size: 14px; }

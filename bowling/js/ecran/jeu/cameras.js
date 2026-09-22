@@ -53,8 +53,15 @@ export class Cameras {
     switch (this.plan) {
       case 'preparation': {
         const x = (ctx.visee ? ctx.visee.position : 0) * 0.3;
-        p.set(x * 0.5, 1.75, 3.1);
-        r.set(x, 0.45, -7);
+        if (this.lire('vueDessus', false)) {
+          // Vue du dessus pour viser : la piste entière, quilles en haut de l'écran
+          p.set(0, 14, -L / 2 + 1.5);
+          r.set(0, 0, -L / 2 - 0.5);
+          break;
+        }
+        const recul = this.lire('reculPreparation', 3.1), hauteur = this.lire('hauteurPreparation', 1.75);
+        p.set(x * 0.5, hauteur, recul);
+        r.set(x, 0.45, -7 - (3.1 - recul) * 2);
         break;
       }
       case 'roulement': {

@@ -312,6 +312,7 @@ function lancerAutorise(source, jeton = null) {
 function demarrerTour() {
   const jc = match.joueurCourant();
   if (!jc) return;
+  if (lire('recentrerVisee') !== false) partie.reglerVisee(0, 0);
   clearTimeout(timerPassage);
   attentePassage = false;
   tourClavier = false;
@@ -519,6 +520,9 @@ window.addEventListener('keydown', (e) => {
     case 'h': case 'H': hud.basculerAide(); break;
     case 'j': case 'J': hud.basculerRejoindre(); break;
     case 'k': case 'K': basculerTourClavier(); break;
+    case '+': case '=': zoomPreparation(1); break;
+    case '-': zoomPreparation(-1); break;
+    case 't': case 'T': basculerVueDessus(); break;
     case 'm': case 'M': if (entrainement) location.href = 'index.html'; else if (titre.visible) titre.afficher(false); else allerAuTitre(); break;
     default: break;
   }
@@ -555,8 +559,10 @@ function boucle(maintenant) {
   hud.majJauge(bot.actif ? bot.jauge() : clavier.jauge);
   tempsGlobal += dt;
   suivreSons(dt);
+  enregistrerTrace();
   if (scene) {
     scene.synchroniser(phys);
+    scene.afficherTrace(partie.phase === 'preparation' && lire('traceDernierLancer') !== false);
     if (personnage) {
       personnage.placer(partie.visee.position * (DIM.largeurPiste / 2 - DIM.rayonBoule - 0.02));
       personnage.animer(dt, tempsGlobal);
@@ -602,6 +608,35 @@ function majBrasPersonnage(j, s, p) {
   personnage.piloterBras(angle);
   if (s.calib) hud.majTour({ titre: hud.pTourTitre.textContent, sous: 'bras : ' + Math.round(angle * 180 / Math.PI) + '°' + (angle < -0.2 ? ' (en arrière)' : angle > 0.2 ? ' (devant)' : ''), classe: 'passage' });
 }
+
+// ---------- Trace du dernier lancer ----------
+
+const trace = { points: [], dernierZ: null, couleur: '#ffffff' };
+function enregistrerTrace() {
+  const b = phys.boule;
+  if (!b.enJeu || b.termine) return;
+  const p = b.corps.position;
+  if (p.z > 0.2 || p.z < -DIM.longueurPiste - 0.3) return;
+  if (trace.dernierZ === null || trace.dernierZ - p.z >= 0.25) { trace.points.push({ x: p.x, z: p.z }); trace.dernierZ = p.z; }
+}
+partie.addEventListener('lancer', () => { trace.points = []; trace.dernierZ = null; if (scene) { trace.couleur = '#' + scene.matBoule.color.getHexString(); scene.majTrace(null); } });
+partie.addEventListener('resultat', () => { if (scene && trace.points.length > 1) scene.majTrace(trace.points, trace.couleur); });
+
+// ---------- Zoom et vue du dessus (préparation) ----------
+
+function zoomPreparation(sens) {
+  const v = Math.min(7, Math.max(1.2, (Number(lire('reculPreparation')) || 3.1) - sens * 0.3));
+  reglages.set('reculPreparation', Math.round(v * 10) / 10);
+  hud.message('Recul caméra : ' + v.toFixed(1).replace('.', ',') + ' m', 1);
+}
+function basculerVueDessus() {
+  reglages.set('vueDessus', !lire('vueDessus'));
+  hud.message(lire('vueDessus') ? 'Vue du dessus (T pour revenir)' : 'Vue normale', 1.5);
+}
+window.addEventListener('wheel', (e) => {
+  if (!partie.peutLancer() || e.target.closest('#banc, #tiroir, #salon, #fin, #titre, #profils')) return;
+  zoomPreparation(e.deltaY < 0 ? 1 : -1);
+}, { passive: true });
 
 // ---------- Sons liés à la physique ----------
 
@@ -760,6 +795,8 @@ function gererMessage(j, m) {
     }
     case TYPES.VISEE: {
       if (!lancerAutorise('telephone', j.jeton) && !(attentePassage && manetteDuJoueurCourant(j))) return;
+      if (m.quoi === 'zoom') { zoomPreparation(m.sens < 0 ? -1 : 1); return; }
+      if (m.quoi === 'vue') { basculerVueDessus(); return; }
       if (m.quoi === 'position' || m.quoi === 'angle') partie.viser(m.quoi, m.sens < 0 ? -1 : 1);
       break;
     }
@@ -1109,7 +1146,19 @@ scoreboard.afficher(false);
 if (MODE !== 'partie') { salon.afficher(false); demarrerEntrainement(); }
 else { salon.afficher(false); titre.afficher(true); }
 $('btn-menu').addEventListener('click', () => { if (entrainement) location.href = 'index.html'; else allerAuTitre(); });
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  const dejaControle = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Une nouvelle version vient de prendre le contrôle (le service worker a été remplacé) : proposer de recharger
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!dejaControle) return;
+    const b = document.createElement('div');
+    b.className = 'maj-dispo';
+    b.innerHTML = 'Nouvelle version prête — <button type="button">Recharger</button>';
+    b.querySelector('button').addEventListener('click', () => location.reload());
+    document.body.append(b);
+  });
+}
 demarrerRendu().then(() => requestAnimationFrame(boucle));
 const codeSauve = localStorage.getItem('bowling.salle');
 salle.ouvrir(codeValide(codeSauve) ? codeSauve : nouveauCode());

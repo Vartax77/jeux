@@ -384,8 +384,8 @@ export class Scene3D {
     this.guide = new THREE.Group();
     this.matGuide = new THREE.MeshBasicMaterial({ color: '#2f6fe4', transparent: true, opacity: 0.95, depthWrite: false });
     this.matGuideOmbre = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.35, depthWrite: false });
-    const geoTiret = new THREE.PlaneGeometry(0.09, 0.32);
-    const geoOmbre = new THREE.PlaneGeometry(0.15, 0.4);
+    const geoTiret = new THREE.PlaneGeometry(0.05, 0.3);
+    const geoOmbre = new THREE.PlaneGeometry(0.09, 0.36);
     this.tiretsGuide = [];
     for (let i = 0; i < 36; i++) {
       const g = new THREE.Group();
@@ -437,6 +437,26 @@ export class Scene3D {
     this.camera.aspect = largeur / hauteur;
     this.camera.updateProjectionMatrix();
   }
+
+  // Trace fantôme du dernier lancer : points {x, z} → pointillés discrets dans la couleur du lanceur.
+  majTrace(points, couleurHex) {
+    if (this.trace) { this.scene.remove(this.trace); this.trace.traverse((o) => { if (o.geometry && o !== this.trace) o.geometry.dispose(); }); this.trace = null; }
+    if (!points || points.length < 2) return;
+    const grp = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: couleurHex || '#ffffff', transparent: true, opacity: 0.55, depthWrite: false });
+    const geo = new THREE.CircleGeometry(0.03, 12);
+    for (const p of points) {
+      const m = new THREE.Mesh(geo, mat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(p.x, 0.005, p.z);
+      m.renderOrder = 1;
+      grp.add(m);
+    }
+    this.scene.add(grp);
+    this.trace = grp;
+  }
+
+  afficherTrace(visible) { if (this.trace) this.trace.visible = visible; }
 
   // Barrière d'entraînement (mur bas sur la piste) ; config = { jusquA, z } ou null.
   majBarriere(config) {
@@ -504,13 +524,12 @@ export class Scene3D {
     const longueur = mode === 'court' ? 7 : DIM.longueurPiste - 0.6;
     const pas = 0.5;
     for (let i = 0; i < this.tiretsGuide.length; i++) {
-      const d = 0.6 + i * pas;
+      const d = 0.25 + i * pas;
       const g = this.tiretsGuide[i];
       g.visible = mode !== 'aucun' && d <= longueur;
       g.position.set(x0 + Math.sin(a) * d, 0, -Math.cos(a) * d);
       g.rotation.y = -a;
-      // Les tirets grossissent légèrement avec la distance pour compenser la perspective
-      g.scale.setScalar(1 + (d / DIM.longueurPiste) * 1.2);
+      g.scale.setScalar(1);
     }
     // Cible à la hauteur de la quille 1, sur la ligne droite
     const dCible = DIM.longueurPiste / Math.cos(a);

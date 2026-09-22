@@ -117,6 +117,10 @@ export const SCHEMA = [
       { id: 'dureeRemise', type: 'nombre', defaut: 2.6, min: 0.5, max: 6, pas: 0.25, unite: 's', libelle: 'Durée de la remise en place' },
       { id: 'planImpact', type: 'choix', defaut: 'derriere', libelle: 'Caméra à l’impact', options: [['derriere', 'Derrière la boule (voir les quilles tomber de face)'], ['cote', 'De côté, au-dessus des parois (coupe franche)']] },
       { id: 'distanceCoupeImpact', type: 'nombre', defaut: 2.5, min: 0.5, max: 6, pas: 0.25, unite: 'm', libelle: 'Distance des quilles où la caméra passe en plan d’impact' },
+      { id: 'vueDessus', type: 'bool', defaut: false, libelle: 'Préparation : vue du dessus (T)' },
+      { id: 'reculPreparation', type: 'nombre', defaut: 3.1, min: 1.2, max: 7, pas: 0.1, unite: 'm', libelle: 'Préparation : recul de la caméra (zoom)',
+        aide: 'Molette de la souris, touches + et −, ou boutons − / + de la manette.' },
+      { id: 'hauteurPreparation', type: 'nombre', defaut: 1.75, min: 0.6, max: 5, pas: 0.05, unite: 'm', libelle: 'Préparation : hauteur de la caméra' },
       { id: 'hauteurPoursuite', type: 'nombre', defaut: 1.25, min: 0.3, max: 3, pas: 0.05, unite: 'm', libelle: 'Poursuite : hauteur de la caméra' },
       { id: 'reculPoursuite', type: 'nombre', defaut: 3.2, min: 1, max: 6, pas: 0.1, unite: 'm', libelle: 'Poursuite : recul derrière la boule' },
       { id: 'lissageCamera', type: 'nombre', defaut: 5, min: 1, max: 12, pas: 0.5, libelle: 'Réactivité des mouvements de caméra',
@@ -142,6 +146,8 @@ export const SCHEMA = [
   },
   {
     id: 'regles', titre: 'Règles', champs: [
+      { id: 'recentrerVisee', type: 'bool', defaut: true, libelle: 'Recentrer la visée après chaque lancer' },
+      { id: 'traceDernierLancer', type: 'bool', defaut: true, libelle: 'Afficher la trace du dernier lancer pendant la préparation' },
       { id: 'nbFrames', type: 'choix', defaut: 10, libelle: 'Nombre de frames', options: [[10, '10 (partie officielle)'], [5, '5 (partie courte)']],
         aide: 'Pris en compte à la prochaine partie (modifiable aussi dans le salon).' },
       { id: 'gouttieresFermees', type: 'bool', defaut: false, libelle: 'Gouttières fermées (bumpers)' },
