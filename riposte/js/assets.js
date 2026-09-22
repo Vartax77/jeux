@@ -130,7 +130,7 @@ export class Assets {
       return new THREE.MeshStandardMaterial({ map, color: new THREE.Color(color).multiplyScalar(1.35), roughness: 0.85, metalness: 0.1, ...extra });
     }
     const map = t.clone(); map.needsUpdate = true; map.repeat.set(repeat[0], repeat[1]);
-    return new THREE.MeshStandardMaterial({ map, color: 0xffffff, roughness: 0.85, metalness: 0.1, ...extra });
+    return new THREE.MeshStandardMaterial({ map, color: 0xffffff, roughness: texName === 'wood' ? 0.9 : 0.8, metalness: texName === 'metal' || texName === 'container' ? 0.3 : 0.05, ...extra });
   }
   // Matériau dont la texture couvre `metres` mètres par répétition, quel que soit l'objet (1 caisse de 2 m = 2 répétitions)
   scaled(texName, color, w, h, d, metres = 1, extra = {}) {

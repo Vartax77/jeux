@@ -22,7 +22,7 @@ Tout est statique (GitHub Pages, dépôt `jeux`, dossier `riposte/`). Liaison Pe
 - Coop : vies, balles et score par joueur ; la caméra se baisse quand tous les joueurs vivants sont à couvert. Game over : TIRER = continue au point courant.
 
 ## Touches PC
-`+`/`−` sensibilité · `R` recentrage (doux / fort / non) · `K` joueur clavier · `M` son · `N` musique · `C` continues limités ou illimités · `D` (au menu) change de difficulté · `Échap` pause pendant l'action, menu sinon · `L` panneau lobby
+`P` post-traitement (bloom, étalonnage, grain, vignette) activé/coupé — à couper si ça rame · `+`/`−` sensibilité · `R` recentrage (doux / fort / non) · `K` joueur clavier · `M` son · `N` musique · `C` continues limités ou illimités · `D` (au menu) change de difficulté · `Échap` pause pendant l'action, menu sinon · `L` panneau lobby
 
 ## Difficulté (Facile / Normal / Difficile)
 Se choisit sur l'écran titre : viser une des trois pastilles et tirer dessus. Mémorisée comme les autres réglages. Elle ajuste, de façon cohérente dans tout le jeu :

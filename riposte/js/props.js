@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 // Objets modelés en primitives, avec relief : servent tant qu'aucun assets/props/<nom>.glb n'est déposé.
 // Couleurs prises de photos de terminaux à conteneurs (teintes sourdes, jamais saturées).
-export const CONTAINER_COLORS = [0x8a3a2c, 0x2b5a92, 0x3a6a3f, 0x6b2a2a, 0x9a5a2a, 0x5a5f66, 0x1f2a30, 0x2a6a7a];
+export const CONTAINER_COLORS = [0x7a3a22, 0x8a4a28, 0x2b4a5a, 0x5a3a2a, 0x6a4a2e, 0x3a4048, 0x2a3a40, 0x7a5a30];
 
 let _corrugated = null;
 // Carte de normales de tôle ondulée : nervures verticales, générée une fois
@@ -51,7 +51,7 @@ export function makeContainer(color = CONTAINER_COLORS[0], L = 6.06, H = 2.59, W
 }
 
 // Palette EUR 1,2 × 0,8 × 0,144 m
-export function makePallet(color = 0x9a8262) {
+export function makePallet(color = 0x6a5a44) {
   const g = new THREE.Group(); const wood = std(color, { roughness: 0.9, metalness: 0 }), wood2 = std(new THREE.Color(color).multiplyScalar(0.85), { roughness: 0.9, metalness: 0 });
   const L = 1.2, W = 0.8;
   for (let i = 0; i < 5; i++) box(L, 0.022, 0.1, wood, 0, 0.133, -W / 2 + 0.05 + i * (W - 0.1) / 4, g);            // planches du dessus
@@ -62,7 +62,7 @@ export function makePallet(color = 0x9a8262) {
 }
 
 // Baril 200 L : Ø 0,58 × 0,88 m
-export function makeBarrel(color = 0x2b5a92) {
+export function makeBarrel(color = 0x7a4a2a) {
   const g = new THREE.Group(); const m = std(color, { roughness: 0.55, metalness: 0.5 }), rim = std(0x2a2d31, { roughness: 0.5, metalness: 0.6 });
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, 0.88, 20), m); body.position.y = 0.44; body.castShadow = body.receiveShadow = true; g.add(body);
   for (const y of [0.30, 0.58]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.018, 8, 24), rim); r.rotation.x = Math.PI / 2; r.position.y = y; g.add(r); }
@@ -71,7 +71,7 @@ export function makeBarrel(color = 0x2b5a92) {
 }
 
 // Caisse bois à cadre : dimensions libres
-export function makeCrate(w = 1.2, h = 1.0, d = 0.8, color = 0x8a7a62) {
+export function makeCrate(w = 1.2, h = 1.0, d = 0.8, color = 0x4a4038) {
   const g = new THREE.Group(); const wood = std(color, { roughness: 0.9, metalness: 0 }), edge = std(new THREE.Color(color).multiplyScalar(0.7), { roughness: 0.9, metalness: 0 });
   box(w - 0.06, h - 0.06, d - 0.06, wood, 0, h / 2, 0, g);
   const e = 0.06;
@@ -87,7 +87,7 @@ export function makeProp(name, opts = {}) {
   switch (name) {
     case 'conteneur': return makeContainer(opts.color ?? CONTAINER_COLORS[Math.random() * CONTAINER_COLORS.length | 0]);
     case 'palette': return makePallet();
-    case 'baril': return makeBarrel(opts.color ?? [0x2b5a92, 0x8a3a2c, 0x3a6a3f, 0x4a4a4a][Math.random() * 4 | 0]);
+    case 'baril': return makeBarrel(opts.color ?? [0x7a4a2a, 0x8a5a2a, 0x4a4a48, 0x5a3a2a][Math.random() * 4 | 0]);
     case 'caisse': return makeCrate(opts.w ?? 1.2, opts.h ?? 1.0, opts.d ?? 0.8);
     default: return null;
   }

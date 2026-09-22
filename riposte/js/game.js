@@ -7,6 +7,7 @@ import { LEVELS } from './levels.js';
 import { Enemy, Bullet, CFG, TYPES, clamp, smooth, rnd } from './entities.js';
 import { makeBoss } from './bosses.js';
 import { makeProp, CONTAINER_COLORS } from './props.js';
+import { Post } from './post.js';
 import { loadSettings, saveSettings, saveHighScore, loadHighScores } from './settings.js';
 import { DIFFS, DIFF_ORDER } from './difficulty.js';
 
@@ -28,6 +29,7 @@ export class Game {
     this.net = new Net({ fovX: saved ? saved.fovX : SET.fovX, autoCenter: saved ? saved.autoCenter : 'soft', onEvent: (t, p, d) => this.onNet(t, p, d) });
     if (saved) { this.audio.enabled = saved.sound !== false; this.music.enabled = saved.music !== false; }
     this.calibDone = this.settingsLoaded; this.calibPlayer = null; this.calibStep = 0;
+    this.postOn = saved ? saved.post !== false : true;
     this.usedContinueThisZone = false; this.continuesLeft = CONTINUES_PER_ZONE;
     this.state = 'loading';
     this.timeScale = 1; this.slowmoLeft = 0;
@@ -56,7 +58,7 @@ export class Game {
   }
 
   saveSettingsNow() {
-    saveSettings({ fovX: this.net.fovX, autoCenter: this.net.autoCenter, sound: this.audio.enabled, music: this.music.enabled, continuesLimited: this.continuesLimited, difficulty: this.difficultyKey });
+    saveSettings({ fovX: this.net.fovX, autoCenter: this.net.autoCenter, sound: this.audio.enabled, music: this.music.enabled, continuesLimited: this.continuesLimited, difficulty: this.difficultyKey, post: this.postOn });
   }
   setDifficulty(key) { if (!DIFFS[key]) return; this.difficultyKey = key; this.diff = DIFFS[key]; this.audio.lock(0); this.saveSettingsNow(); }
 
@@ -72,6 +74,7 @@ export class Game {
       if (k === 'm') { this.audio.enabled = !this.audio.enabled; this.music.setEnabled(this.audio.enabled); this.setBanner(this.audio.enabled ? 'Son activé' : 'Son coupé', 1.2); this.saveSettingsNow(); }
       if (k === 'n') { this.music.setEnabled(!this.music.enabled); this.setBanner(this.music.enabled ? 'Musique activée' : 'Musique coupée', 1.2); this.saveSettingsNow(); }
       if (k === 'd' && this.state === 'title') { this.setDifficulty(DIFF_ORDER[(DIFF_ORDER.indexOf(this.difficultyKey) + 1) % 3]); this.setBanner('Difficulté : ' + this.diff.label, 1.2); }
+      if (k === 'p') { this.postOn = !this.postOn; this.setBanner('Post-traitement : ' + (this.postOn ? 'activé' : 'coupé'), 1.2); this.saveSettingsNow(); }
       if (k === 'c') { this.continuesLimited = !this.continuesLimited; this.continuesLeft = this.continuesLimited ? this.diff.continues : Infinity; this.setBanner('Continues : ' + (this.continuesLimited ? this.diff.continues + ' par zone' : 'illimités'), 1.5); this.saveSettingsNow(); }
       if (e.key === '+' || e.key === '=') { this.net.fovX = clamp(this.net.fovX + 2, 10, 90); this.saveSettingsNow(); }
       if (e.key === '-') { this.net.fovX = clamp(this.net.fovX - 2, 10, 90); this.saveSettingsNow(); }
@@ -87,7 +90,7 @@ export class Game {
   }
   _resize() {
     const w = innerWidth, h = innerHeight, r = Math.min(devicePixelRatio || 1, 2);
-    this.renderer.setSize(w, h, false); this.renderer.setPixelRatio(r);
+    this.renderer.setSize(w, h, false); this.renderer.setPixelRatio(r); if (this.post) this.post.setSize(w, h);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     this.cv2.width = Math.floor(w * r); this.cv2.height = Math.floor(h * r); this.ctx2.setTransform(r, 0, 0, r, 0, 0);
   }
@@ -96,7 +99,7 @@ export class Game {
   _initScene() {
     this.renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: true, powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.3;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.15;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 700);
     this.camBase = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
@@ -116,6 +119,7 @@ export class Game {
     this.sparkPts = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.12, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.sparkPts.frustumCulled = false; this.scene.add(this.sparkPts);
     this.envMeshes = []; this.raycaster = new THREE.Raycaster();
+    try { this.post = new Post(this.renderer, this.scene, this.camera); } catch (e) { console.warn('post-traitement indisponible', e); this.post = null; }
     this._resize();
   }
 
@@ -130,8 +134,8 @@ export class Game {
     if (this.env) { this.scene.remove(this.env); this.env.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); }
     this.env = new THREE.Group(); this.env.userData.theme = level.theme; this.scene.add(this.env); this.envMeshes = [];
     const A = this.assets, t = level.theme;
-    const sky = { docks: 0x0e1620, street: 0x0f1320, hangar: 0x0a0b0d }[t];
-    this.scene.background = new THREE.Color(sky); this.scene.fog = new THREE.Fog(sky, t === 'hangar' ? 20 : 30, t === 'hangar' ? 70 : (A.backdrops[t] ? 230 : 110));
+    const sky = { docks: 0x16303a, street: 0x0f1320, hangar: 0x0a0b0d }[t];
+    this.scene.background = new THREE.Color(sky); this.scene.fog = new THREE.Fog(t === 'docks' ? 0x2a4650 : sky, t === 'hangar' ? 20 : 18, t === 'hangar' ? 70 : (A.backdrops[t] ? 150 : 110));
     this.hemi.color.setHex({ docks: 0x9cc0e8, street: 0x9fb0d0, hangar: 0x8a9ab0 }[t]); this.hemi.intensity = t === 'hangar' ? 0.7 : 1.1;
     this.sun.color.setHex({ docks: 0xffd8a8, street: 0xffe0c0, hangar: 0xe8f0ff }[t]); this.sun.intensity = t === 'hangar' ? 1.4 : 2.6;
     // Fond panoramique lointain (texture si fournie, sinon ligne d'horizon peinte)
@@ -148,7 +152,7 @@ export class Game {
       map.repeat.set(Math.max(1, Math.round((2 * Math.PI * R / Hc) / aspect)), 1);
     }
     else this._paintedSkyline(t);
-    const groundMat = A.scaled(t === 'hangar' ? 'concrete' : 'asphalt', { docks: 0x2b3038, street: 0x24262b, hangar: 0x3a3c40 }[t], 300, 300, 300, 7, A.textures[t === 'hangar' ? 'concrete' : 'asphalt'] ? { color: 0x6a6d72 } : {});
+    const groundMat = A.scaled(t === 'hangar' ? 'concrete' : 'asphalt', { docks: 0x2b3038, street: 0x24262b, hangar: 0x3a3c40 }[t], 300, 300, 300, 7, { ...(A.textures[t === 'hangar' ? 'concrete' : 'asphalt'] ? { color: 0x6a6d72 } : {}), roughness: t === 'hangar' ? 0.7 : 0.38, metalness: 0.15 });   // sol mouillé : reflets des lampes
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), groundMat); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; this.env.add(ground); this.envMeshes.push(ground);
     if (t === 'docks') this._themeDocks(); else if (t === 'street') this._themeStreet(); else this._themeHangar();
     // Couverts du joueur, caisses et plates-formes des ennemis, lampadaire par zone de combat
@@ -159,7 +163,7 @@ export class Game {
           const side = dir.x > 0.3 ? -1 : 1, lx = t === 'street' ? side * 9.4 : cx + side * 7, lz = cz + 1.5;
           if (t !== 'hangar') { const lp = this._propOrBox('lampadaire', 0.18, 5.5, 0.18, 'metal', 0x555a66, lx, lz, null, side > 0 ? Math.PI : 0); this.envMeshes = this.envMeshes.filter(m => m !== lp && m.parent !== lp);   // le mât ne bloque pas les tirs
           if (!lp.isGroup) { const mat = A.material('metal', 0x555a66); this._box(1.2, 0.12, 0.3, mat, lx - side * 0.5, 5.5, lz, { shadow: false }); const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe8b0 })); bulb.position.set(lx - side * 1.0, 5.4, lz); this.env.add(bulb); } }
-          const pl = new THREE.PointLight(0xffe0a0, t === 'hangar' ? 60 : 90, 26, 1.6); pl.position.set(lx - side * 1.0, t === 'hangar' ? 6.5 : 5.3, lz); this.env.add(pl);
+          const pl = new THREE.PointLight(0xffb060, t === 'hangar' ? 60 : 140, 30, 1.5); pl.position.set(lx - side * 1.0, t === 'hangar' ? 6.5 : 5.3, lz); this.env.add(pl);
       } }
       const c = p.clone().add(dir.clone().multiplyScalar(pt.cover === 'car' ? 2.6 : 1.9));
       if (pt.cover === 'car') this._car(c.x, c.z, Math.atan2(dir.x, dir.z) + Math.PI / 2, 0x8a2a2a, true);
@@ -197,6 +201,21 @@ export class Game {
     if (lookAtPos) m.lookAt(lookAtPos.x, h / 2, lookAtPos.z); if (rotY !== null) m.rotation.y = rotY;
     return m;
   }
+  // Objet explosif : un tir dessus → explosion (rayon, taille) ; les ennemis dans le rayon sont abattus
+  _explosive(g, color = 0x8a2a2a, size = 1.2, radius = 3.5) {
+    g.userData.explosive = true; g.userData.exSize = size; g.userData.exRadius = radius;
+    if (color !== null) g.traverse(o => { if (o.isMesh && o.material && o.material.color && !o.userData.keepColor) { o.material = o.material.clone(); o.material.color.setHex(color); } });
+    return g;
+  }
+  _placeExplosives(level, kind = 'baril') {
+    for (const pt of level.points) for (const w of pt.waves) for (const e of w.enemies.slice(0, 2)) {
+      if (e.pos[1] > 0.1) continue;
+      const side = (Math.abs(e.pos[0] * 5 + e.pos[2]) | 0) % 2 ? -1 : 1;
+      const isCan = ((Math.abs(e.pos[2]) | 0) % 3 === 0);
+      const g = this._propOrBox(isCan ? 'bidon' : kind, 0.6, isCan ? 0.6 : 0.9, 0.6, 'metal', isCan ? 0x6a6a2a : 0x8a2a2a, e.pos[0] + side * 1.6, e.pos[2] + 0.4, null, 0);
+      this._explosive(g, isCan ? 0x7a7a2a : 0x8a2a2a, isCan ? 0.9 : 1.2, isCan ? 3 : 3.5);
+    }
+  }
   _paintedSkyline(t) {
     if (t === 'hangar') return;
     const palette = { docks: [0x394655, 0x4a3f3a, 0x2f4a4a], street: [0x2a2233, 0x3a2a3a, 0x1f2a3a] }[t];
@@ -225,8 +244,7 @@ export class Game {
     for (let i = 0; i < 4; i++) { const x = rnd(-80, 90), z = -rnd(70, 95); this._box(1.2, 30, 1.2, dark, x - 6, 15, z, { shadow: false, env: false }); this._box(1.2, 30, 1.2, dark, x + 6, 15, z, { shadow: false, env: false }); this._box(28, 1.5, 1.5, dark, x, 30, z, { shadow: false, env: false }); }
     // Petits objets près des zones de combat
     for (let i = 0; i < 10; i++) this._propOrBox(i % 2 ? 'palette' : 'baril', i % 2 ? 1.2 : 0.6, i % 2 ? 0.15 : 0.9, i % 2 ? 1.0 : 0.6, i % 2 ? 'wood' : 'metal', i % 2 ? 0x9a7a4a : 0x3a5a8a, rnd(-6, 22), -rnd(4, 60), null, rnd(0, Math.PI));
-    // Barils rouges explosifs près des caisses ennemies (un tir dessus abat tout ce qui est à 3,5 m)
-    for (const pt of this.level.points) for (const w of pt.waves) for (const e of w.enemies.slice(0, 1)) { const g = this._propOrBox('baril', 0.6, 0.9, 0.6, 'metal', 0x8a2a2a, e.pos[0] + 1.6, e.pos[2] + 0.4, null, 0); g.userData.explosive = true; g.traverse(o => { if (o.isMesh && o.material && o.material.color) o.material = o.material.clone(), o.material.color.setHex(0x8a2a2a); }); }
+    this._placeExplosives(this.level);
     for (let i = 0; i < 5; i++) { const x = i % 2 ? rnd(27, 36) : rnd(-18, -10), z = -rnd(5, 70); if (A.prop('grue')) { this._propOrBox('grue', 6, 22, 6, 'metal', 0x6b6f77, x, z, null, rnd(0, Math.PI)); continue; } const m = A.material('metal', 0x6b6f77); this._box(0.5, 12, 0.5, m, x - 2.5, 6, z, { shadow: false }); this._box(0.5, 12, 0.5, m, x + 2.5, 6, z, { shadow: false }); this._box(6, 0.4, 0.4, m, x, 11, z, { shadow: false }); }
     const water = new THREE.Mesh(new THREE.PlaneGeometry(300, 120), new THREE.MeshStandardMaterial({ color: 0x0b2a3a, roughness: 0.2, metalness: 0.6 })); water.rotation.x = -Math.PI / 2; water.position.set(0, 0.02, -140); this.env.add(water);
     const lineMat = new THREE.MeshStandardMaterial({ color: 0x9a8a3a, roughness: 1 });
@@ -241,8 +259,9 @@ export class Game {
       }
       for (let z = -2; z > -80; z -= 14) this._box(0.25, 5, 0.25, A.material('metal', 0x555a66), side * 9, 2.5, z, { shadow: false });
     }
-    for (let i = 0; i < 7; i++) { const x = i % 2 ? rnd(-8, -5) : rnd(5, 8), z = -rnd(6, 76); if (A.prop(i % 3 ? 'voiture' : '4x4')) this._propOrBox(i % 3 ? 'voiture' : '4x4', 4.2, 1.4, 1.9, 'metal', 0x555555, x, z, null, rnd(-0.2, 0.2)); else this._car(x, z, rnd(-0.2, 0.2), [0x2a4a8a, 0x8a8a8a, 0x2a2a2a, 0xc0c0c0, 0x8a2a2a][i % 5]); }
+    for (let i = 0; i < 7; i++) { const x = i % 2 ? rnd(-8, -5) : rnd(5, 8), z = -rnd(6, 76); const car = A.prop(i % 3 ? 'voiture' : '4x4') ? this._propOrBox(i % 3 ? 'voiture' : '4x4', 4.2, 1.4, 1.9, 'metal', 0x555555, x, z, null, rnd(-0.2, 0.2)) : this._car(x, z, rnd(-0.2, 0.2), [0x2a4a8a, 0x8a8a8a, 0x2a2a2a, 0xc0c0c0, 0x8a2a2a][i % 5]); this._explosive(car, null, 1.8, 4.5); }
     for (let i = 0; i < 6; i++) this._propOrBox('poubelle', 0.7, 1.2, 0.7, 'metal', 0x2f5a3a, (i % 2 ? -9.2 : 9.2), -rnd(4, 76), null, 0);
+    this._placeExplosives(this.level);
     // Plan intermédiaire : immeubles lointains au bout de la rue
     const far = new THREE.MeshStandardMaterial({ color: 0x1a1720, roughness: 1 });
     for (let i = 0; i < 14; i++) { const x = rnd(-60, 60), h = rnd(20, 60); this._box(rnd(10, 18), h, 14, far, x, h / 2, -rnd(100, 150), { shadow: false, env: false }); }
@@ -265,6 +284,7 @@ export class Game {
     for (const side of [-1, 1]) { this._box(3.2, 0.3, 96, steel, side * 11.4, 3.85, -40); this._box(0.08, 1.0, 96, steel, side * 9.85, 4.5, -40, { shadow: false }); for (let z = 0; z > -80; z -= 8) this._box(0.2, 4, 0.2, steel, side * 12.9, 2, z - 2); }
     for (let z = -6; z > -78; z -= 16) for (const side of [-1, 1]) { const l = new THREE.SpotLight(0xfff0d0, 40, 30, 0.6, 0.5, 1.2); l.position.set(side * 8, 9, z); l.target.position.set(side * 3, 0, z - 4); this.env.add(l); this.env.add(l.target); const cone = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.6, 10), new THREE.MeshBasicMaterial({ color: 0xfff0d0 })); cone.position.copy(l.position); this.env.add(cone); }
     for (let i = 0; i < 8; i++) this._propOrBox(['caisse', 'baril', 'palette', 'chariot'][i % 4], 1.2, 1.2, 1.2, 'wood', 0x8a6f48, rnd(-8, 8) + (i % 2 ? 6 : -6), -rnd(8, 74), null, rnd(0, Math.PI));
+    this._placeExplosives(this.level);
   }
 
   // ------------------------------------------------------------ Réseau → jeu
@@ -320,7 +340,7 @@ export class Game {
     if (o.userData.enemy) { o.userData.enemy.hit(o.userData.part, p, pan, o); return; }
     if (o.userData.bullet) { o.userData.bullet.shotDown(p, pan); return; }
     let ex = o; while (ex && !ex.userData.explosive) ex = ex.parent;
-    if (ex && ex.userData.explosive) { ex.userData.explosive = false; const wp = ex.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.5, 0)); ex.visible = false; this.explode(wp, 1.2, true, 3.5); p.g.score += 100; return; }
+    if (ex && ex.userData.explosive) { ex.userData.explosive = false; const wp = ex.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.5, 0)); const car = ex.userData.exSize >= 1.8; if (!car) ex.visible = false; else ex.traverse(o => { if (o.isMesh && o.material && o.material.color) { o.material = o.material.clone(); o.material.color.setHex(0x1a1a1a); } }); this.explode(wp, ex.userData.exSize || 1.2, true, ex.userData.exRadius || 3.5); p.g.score += car ? 250 : 100; return; }
     this.spawnSparks(h.point, 0xffd080, 14, 3); this.audio.ricochet(pan);
   }
 
@@ -500,7 +520,7 @@ export class Game {
     this.rim.target.position.copy(this.camBase.pos); this.rim.position.copy(this.camBase.pos).addScaledVector(fwd, 40).add(new THREE.Vector3(-10, 18, 0));
     this.fill.position.copy(this.camBase.pos).add(new THREE.Vector3(0, 3.5, 0)).addScaledVector(fwd, 4);
     this._cullLights();
-    this.renderer.render(this.scene, this.camera);
+    if (this.post && this.post.enabled && this.postOn) this.post.render(raw); else this.renderer.render(this.scene, this.camera);
     this.draw2D(); this.updateHud();
   }
   update(dt, raw) {
@@ -612,7 +632,11 @@ export class Game {
       c.beginPath(); c.arc(x, y, 16 + recoil, 0, Math.PI * 2); c.stroke();
       c.beginPath(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { c.moveTo(x + dx * (7 + recoil), y + dy * (7 + recoil)); c.lineTo(x + dx * 26, y + dy * 26); } c.stroke();
       c.fillStyle = col; c.beginPath(); c.arc(x, y, 2.5, 0, Math.PI * 2); c.fill();
-      if (p.g.ammo === 0 && this.inFight) { c.font = '700 14px system-ui'; c.textAlign = 'center'; c.fillText('RECHARGE', x, y + 44); }
+      if (p.g.ammo === 0 && this.inFight) {
+        const bl = (now / 250 | 0) % 2 === 0;
+        c.strokeStyle = bl ? '#ff2020' : col; c.lineWidth = 4; c.beginPath(); c.moveTo(x - 20, y - 20); c.lineTo(x + 20, y + 20); c.moveTo(x + 20, y - 20); c.lineTo(x - 20, y + 20); c.stroke();
+        c.fillStyle = bl ? '#ff2020' : '#fff'; c.font = '900 22px system-ui'; c.textAlign = 'center'; c.fillText('CHARGEUR VIDE — COUVREZ-VOUS', x, y + 52);
+      }
     }
     if (now < this.banner.until) {
       const left = (this.banner.until - now) / 1000, a = Math.min(1, left * 3);
