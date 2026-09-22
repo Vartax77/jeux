@@ -22,7 +22,16 @@ Tout est statique (GitHub Pages, dépôt `jeux`, dossier `riposte/`). Liaison Pe
 - Coop : vies, balles et score par joueur ; la caméra se baisse quand tous les joueurs vivants sont à couvert. Game over : TIRER = continue au point courant.
 
 ## Touches PC
-`+`/`−` sensibilité · `R` recentrage (doux / fort / non) · `K` joueur clavier · `M` son · `N` musique · `Échap` menu · `L` panneau lobby
+`+`/`−` sensibilité · `R` recentrage (doux / fort / non) · `K` joueur clavier · `M` son · `N` musique · `C` continues limités (3/zone) ou illimités · `Échap` pause pendant l'action, menu sinon · `L` panneau lobby
+
+## Lot 4 — finition
+- **Calibrage guidé** : au tout premier lancement (rien encore enregistré), TIRER dans le lobby lance un calibrage à 2 tirs (repère gauche, repère droit) qui déduit la sensibilité — plus besoin de régler +/− à l'aveugle. Un appui long (0,7 s) sur le bouton « Recentrer » du téléphone relance ce calibrage à tout moment.
+- **Réglages persistants** : sensibilité, mode de recentrage, son, musique, continues limités/illimités — conservés d'une session à l'autre (stockage local du navigateur).
+- **Pause** : `Échap` pendant l'action ou un boss suspend le jeu (rien ne bouge) ; `Échap` ou TIRER reprend. En dehors d'un combat, `Échap` retourne au menu comme avant.
+- **Continues** : 3 par zone par défaut (`C` pour illimités). Ils s'épuisent : au 4ᵉ game over, TIRER renvoie directement au menu. Un continue utilisé plafonne le rang de la zone à C.
+- **Rang de fin de zone** (S/A/B/C, selon vies restantes, précision et continues utilisés) et **meilleur score conservé** par zone, affichés dans les statistiques de fin.
+- **Téléphone** : bordure qui pulse en rouge dans les 3 dernières secondes de chaque chrono, teinte orange pendant un boss.
+- **Variété** : mort tirée au hasard parmi `death.fbx` / `death2.fbx` / `death3.fbx` / `death4.fbx` (celles présentes) ; réaction visuelle sur `hit.fbx` si déposé (facultatif, mêmes réglages d'export que les autres animations).
 
 ## Ressources optionnelles (dossier `assets/`, tout est facultatif)
 Le jeu tourne sans aucun fichier. Chaque fichier présent remplace sa version procédurale au chargement ; le panneau du lobby indique ce qui a été trouvé (détail dans la console F12).

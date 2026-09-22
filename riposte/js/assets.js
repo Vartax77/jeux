@@ -15,6 +15,11 @@ export const MANIFEST = {
     die:   'assets/anim/death.fbx',
     kneel: 'assets/anim/kneel.fbx',
     run:   'assets/anim/run.fbx',
+    // Optionnelles : plus de variété si présentes, aucun impact si absentes
+    die2:  'assets/anim/death2.fbx',
+    die3:  'assets/anim/death3.fbx',
+    die4:  'assets/anim/death4.fbx',
+    hit:   'assets/anim/hit.fbx',
   },
   // Textures répétables (carrées, 1024×1024 ou 2048×2048, JPG)
   textures: {

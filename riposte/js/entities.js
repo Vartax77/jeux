@@ -54,7 +54,8 @@ export class Enemy {
       return;
     }
     this.hp--;
-    if (this.hp <= 0) this.die(p, false); else this.flash();
+    if (this.hp <= 0) this.die(p, false);
+    else { this.flash(); if (this.char.hasAnim && this.char.hasAnim('hit')) this.char.play('hit'); }
   }
   flash() { this.group.traverse(o => { if (o.isMesh && o.material && o.material.emissive && o.userData.part) { o.material.emissive.setHex(0x660000); setTimeout(() => o.material.emissive.setHex(0), 90); } }); }
   die(p, headshot) {

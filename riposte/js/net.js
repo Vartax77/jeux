@@ -83,6 +83,7 @@ export class Net {
       case 'fire': this.onEvent('fire', p); break;
       case 'cover': this.setCover(p, !!m.on); break;
       case 'center': this.center(p); break;
+      case 'calibrate': this.onEvent('calibrate', p); break;
       case 'pong': p.ping = Math.round(performance.now() - m.ts); break;
     }
   }

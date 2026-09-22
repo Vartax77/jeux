@@ -109,10 +109,12 @@ export class RigCharacter {
   hasAnim(name) { return !!this.actions[name]; }
   gunTip() { const b = this.bones.RightHand || this.bones.RightForeArm; return b ? b.getWorldPosition(new THREE.Vector3()) : this.group.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 1.3, 0)); }
   play(name) {
+    // Variantes de mort : death.fbx, death2.fbx, death3.fbx, death4.fbx (tous optionnels) — une au hasard à chaque mort
+    if (name === 'die') { const v = ['die', 'die2', 'die3', 'die4'].filter(n => this.actions[n]); name = v.length ? v[Math.random() * v.length | 0] : 'die'; }
     const a = this.actions[name] || this.actions.idle || this.actions.embedded; if (!a || a === this.current) return;
     if (this.current) this.current.fadeOut(0.15);
     a.reset().fadeIn(0.15).play();
-    if (name === 'die' || name === 'shoot') { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; }
+    if (name === 'die' || name.startsWith('die') || name === 'shoot' || name === 'hit') { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; }
     this.current = a; this.anim = name;
   }
   kneel() { this.kneeling = true; this.play('kneel'); }

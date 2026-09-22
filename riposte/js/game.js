@@ -6,17 +6,26 @@ import { Assets } from './assets.js';
 import { LEVELS } from './levels.js';
 import { Enemy, Bullet, CFG, TYPES, clamp, smooth, rnd } from './entities.js';
 import { makeBoss } from './bosses.js';
+import { loadSettings, saveSettings, saveHighScore, loadHighScores } from './settings.js';
 
 const SET = { fovX: 40, moveTime: 2.6, slowmo: 0.3, slowmoDur: 0.7, duckDepth: 0.75 };
 const COLORS = ['#ff4d4d', '#4da6ff'];
 const AUTOC = { soft: 'doux (si le pistolet a bougé de plus de 20°)', hard: 'fort (toujours)', off: 'non' };
+const CONTINUES_PER_ZONE = 3;
+const wrapDeg = d => ((d + 540) % 360) - 180;
 const $ = id => document.getElementById(id);
 
 export class Game {
   constructor() {
     this.audio = new Audio(); this.music = new Music(this.audio);
     this.assets = new Assets();
-    this.net = new Net({ fovX: SET.fovX, autoCenter: 'soft', onEvent: (t, p, d) => this.onNet(t, p, d) });
+    const saved = loadSettings();
+    this.settingsLoaded = !!saved;
+    this.continuesLimited = saved ? saved.continuesLimited !== false : true;
+    this.net = new Net({ fovX: saved ? saved.fovX : SET.fovX, autoCenter: saved ? saved.autoCenter : 'soft', onEvent: (t, p, d) => this.onNet(t, p, d) });
+    if (saved) { this.audio.enabled = saved.sound !== false; this.music.enabled = saved.music !== false; }
+    this.calibDone = this.settingsLoaded; this.calibPlayer = null; this.calibStep = 0;
+    this.usedContinueThisZone = false; this.continuesLeft = CONTINUES_PER_ZONE;
     this.state = 'loading';
     this.timeScale = 1; this.slowmoLeft = 0;
     this.enemies = []; this.bullets = []; this.sparks = []; this.events = []; this.fx = [];
@@ -43,6 +52,10 @@ export class Game {
     });
   }
 
+  saveSettingsNow() {
+    saveSettings({ fovX: this.net.fovX, autoCenter: this.net.autoCenter, sound: this.audio.enabled, music: this.music.enabled, continuesLimited: this.continuesLimited });
+  }
+
   // ------------------------------------------------------------ DOM / entrées PC
   _initDom() {
     this.cv2 = $('overlay'); this.ctx2 = this.cv2.getContext('2d');
@@ -52,12 +65,17 @@ export class Game {
       const k = e.key.toLowerCase();
       if (k === 'l') $('lobby').classList.toggle('hidden');
       if (k === 'k') { const p = this.net.addLocalPlayer(); if (p) this.setBanner('Joueur clavier/souris ajouté (J' + (p.slot + 1) + ') — clic = tir, Espace = couvrir', 2.5); }
-      if (k === 'm') { this.audio.enabled = !this.audio.enabled; this.music.setEnabled(this.audio.enabled); this.setBanner(this.audio.enabled ? 'Son activé' : 'Son coupé', 1.2); }
-      if (k === 'n') { this.music.setEnabled(!this.music.enabled); this.setBanner(this.music.enabled ? 'Musique activée' : 'Musique coupée', 1.2); }
-      if (e.key === '+' || e.key === '=') this.net.fovX = clamp(this.net.fovX + 2, 10, 90);
-      if (e.key === '-') this.net.fovX = clamp(this.net.fovX - 2, 10, 90);
-      if (k === 'r') { const modes = ['soft', 'hard', 'off']; this.net.autoCenter = modes[(modes.indexOf(this.net.autoCenter) + 1) % 3]; this.setBanner('Recentrage à la sortie de couvert : ' + AUTOC[this.net.autoCenter], 1.5); }
-      if (k === 'escape' && this.state !== 'lobby' && this.state !== 'loading') this.toTitle();
+      if (k === 'm') { this.audio.enabled = !this.audio.enabled; this.music.setEnabled(this.audio.enabled); this.setBanner(this.audio.enabled ? 'Son activé' : 'Son coupé', 1.2); this.saveSettingsNow(); }
+      if (k === 'n') { this.music.setEnabled(!this.music.enabled); this.setBanner(this.music.enabled ? 'Musique activée' : 'Musique coupée', 1.2); this.saveSettingsNow(); }
+      if (k === 'c') { this.continuesLimited = !this.continuesLimited; this.setBanner('Continues : ' + (this.continuesLimited ? CONTINUES_PER_ZONE + ' par zone' : 'illimités'), 1.5); this.saveSettingsNow(); }
+      if (e.key === '+' || e.key === '=') { this.net.fovX = clamp(this.net.fovX + 2, 10, 90); this.saveSettingsNow(); }
+      if (e.key === '-') { this.net.fovX = clamp(this.net.fovX - 2, 10, 90); this.saveSettingsNow(); }
+      if (k === 'r') { const modes = ['soft', 'hard', 'off']; this.net.autoCenter = modes[(modes.indexOf(this.net.autoCenter) + 1) % 3]; this.setBanner('Recentrage à la sortie de couvert : ' + AUTOC[this.net.autoCenter], 1.5); this.saveSettingsNow(); }
+      if (k === 'escape') {
+        if (this.state === 'paused') { this.state = this.pausedFrom; this.setBanner('', 0); }
+        else if (this.inFight) { this.pausedFrom = this.state; this.state = 'paused'; }
+        else if (this.state !== 'lobby' && this.state !== 'loading' && this.state !== 'calib') this.toTitle();
+      }
       $('fov').textContent = this.net.fovX; $('autoc').textContent = AUTOC[this.net.autoCenter];
     });
     addEventListener('resize', () => this._resize());
@@ -195,6 +213,7 @@ export class Game {
     if (type === 'leave') { this._status(p, 'déconnecté', '#333'); return; }
     if (type === 'cover') { this.onCover(p, data); return; }
     if (type === 'fire') { this.onFire(p); return; }
+    if (type === 'calibrate') { if (!this.inFight && this.state !== 'calib') this.startCalibration(p); return; }
   }
   _status(p, txt, color) { $('s' + (p.slot + 1)).textContent = txt; $('d' + (p.slot + 1)).style.background = color; }
   _initPlayer(p) { p.g = { lives: this.level.lives, ammo: this.level.ammo, score: 0, shots: 0, hits: 0, headshots: 0, bullets: 0, alive: true, hitAt: -9, lastAmmo: -1, lastLives: -1 }; }
@@ -208,14 +227,19 @@ export class Game {
   }
   get inFight() { return this.state === 'action' || this.state === 'boss'; }
   onCover(p, on) {
-    if (!p.g) return;
+    if (!p.g || this.state === 'paused') return;
     if (on && p.g.alive && p.g.ammo < this.level.ammo && this.inFight) { p.g.ammo = this.level.ammo; this.audio.reload(); this._pushState(p); }
   }
   onFire(p) {
     if (!p.g || this.state === 'loading') return;
-    if (this.state === 'lobby') { this.toTitle(); return; }
+    if (this.state === 'paused') { this.state = this.pausedFrom; return; }
+    if (this.state === 'calib') { this.onCalibFire(p); return; }
+    if (this.state === 'lobby') { if (!this.calibDone) this.startCalibration(p); else this.toTitle(); return; }
     if (this.state === 'title') { if (this.menuHover >= 0) this.startLevel(this.menuHover); return; }
-    if (this.state === 'gameover') { this.continueGame(); return; }
+    if (this.state === 'gameover') {
+      if (this.continuesLimited && this.continuesLeft <= 0) { this.toTitle(); return; }
+      this.continueGame(); return;
+    }
     if (this.state === 'clear') { if (this.levelIndex + 1 < LEVELS.length) this.startLevel(this.levelIndex + 1); else this.toTitle(); return; }
     if (!p.g.alive || p.cover) return;
     if (p.g.ammo <= 0) { this.audio.empty(); this.net.send(p, { t: 'ev', k: 'empty' }); this.setBanner('RECHARGE — mets-toi à couvert', 0.8, '', p.slot); return; }
@@ -236,6 +260,20 @@ export class Game {
     this.spawnSparks(h.point, 0xffd080, 14, 3); this.audio.ricochet(pan);
   }
 
+  // ------------------------------------------------------------ Calibration guidée
+  startCalibration(p) { this.state = 'calib'; this.calibPlayer = p; this.calibStep = 0; this.calibYawA = null; $('lobby').classList.add('hidden'); }
+  onCalibFire(p) {
+    if (this.calibPlayer && p !== this.calibPlayer) return;
+    if (this.calibStep === 0) { this.calibYawA = p.yaw; this.calibStep = 1; this.audio.init(); this.audio.resume(); this.audio.lock(0); }
+    else if (this.calibStep === 1) {
+      const da = Math.abs(wrapDeg(p.yaw - this.calibYawA));
+      const fov = clamp(Math.round(da / 0.7), 15, 90);
+      if (da > 2) this.net.fovX = fov;   // mouvement trop faible : on garde la valeur précédente plutôt qu'un calcul aberrant
+      this.calibStep = 2; this.audio.bonus(); this.saveSettingsNow();
+      setTimeout(() => { this.calibDone = true; this.toTitle(); }, 1400);
+    }
+  }
+
   // ------------------------------------------------------------ Déroulé
   toTitle() {
     this.clearField(); this.boss = null;
@@ -252,6 +290,7 @@ export class Game {
     this.setLevel(i);
     this.players().forEach(p => { this._initPlayer(p); this._pushState(p, true); });
     this.pointIndex = 0; this.waveIndex = 0; this.streak = 0; this.penalty = 0;
+    this.continuesLeft = CONTINUES_PER_ZONE; this.usedContinueThisZone = false;
     $('hud').classList.remove('hidden'); $('stats').classList.add('hidden'); $('bossbar').classList.add('hidden');
     this._placeCamera(this.level.points[0]);
     this.state = 'intro'; this.stateClock = 0;
@@ -259,11 +298,21 @@ export class Game {
     this.music.start(this.level.theme); this.music.setIntense(false);
   }
   continueGame() {
+    if (this.continuesLimited) { if (this.continuesLeft <= 0) return; this.continuesLeft--; }
+    this.usedContinueThisZone = true;
     this.clearField();
     this.players().forEach(p => { p.g.lives = this.level.lives; p.g.ammo = this.level.ammo; p.g.alive = true; this._pushState(p); });
     $('stats').classList.add('hidden'); this.waveIndex = 0; this.penalty = 0.2;
     this._placeCamera(this.level.points[this.pointIndex]);
     if (this.boss) { this.boss = null; this.beginBoss(); } else this.beginPoint();
+  }
+  rankFor(p) {
+    if (this.usedContinueThisZone) return 'C';
+    const acc = p.g.shots ? p.g.hits / p.g.shots : 0;
+    if (p.g.lives === this.level.lives && acc >= 0.65) return 'S';
+    if (p.g.lives >= 2 && acc >= 0.5) return 'A';
+    if (p.g.lives >= 1) return 'B';
+    return 'C';
   }
   clearField() { for (const e of this.enemies) e.dispose(); for (const b of this.bullets) b.dispose(); for (const f of this.fx) f.dispose(); this.enemies = []; this.bullets = []; this.fx = []; this.waveQueue = []; this.events = []; this.bossDown = false; this.bossDownT = 0; this.music.setIntense(false); }
 
@@ -296,6 +345,7 @@ export class Game {
     this.boss = makeBoss(this, def); this.enemies.push(this.boss);
     this.setBanner('ALERTE', 2.4, this.boss.name); this.audio.action(); this.music.start('boss'); this.music.setIntense(true);
     $('bossbar').classList.remove('hidden'); $('bossname').textContent = this.boss.name;
+    this.net.forEach(p => this.net.send(p, { t: 'ev', k: 'boss' }));
   }
   onEnemyDied(e) {
     if (e.isBoss) { this.bossDown = true; return; }
@@ -305,16 +355,24 @@ export class Game {
     this.state = 'clear'; this.audio.clear(); this.music.stop(); $('bossbar').classList.add('hidden');
     this.setBanner('ZONE NETTOYÉE', 3);
     const last = this.levelIndex + 1 >= LEVELS.length;
-    this.showStats(this.level.name.replace(/^ZONE \d — /, '') + ' — TERMINÉ', last ? 'Toutes les zones sont libérées. TIRER pour revenir au titre.' : 'TIRER pour passer à la zone suivante');
+    const best = {};
+    for (const p of this.players()) best[p.slot] = saveHighScore(this.level.id, { score: p.g.score, date: Date.now() })[0].score;
+    this.showStats(this.level.name.replace(/^ZONE \d — /, '') + ' — TERMINÉ', last ? 'Toutes les zones sont libérées. TIRER pour revenir au titre.' : 'TIRER pour passer à la zone suivante', best);
   }
   gameOver() {
     this.state = 'gameover'; this.audio.gameOver(); this.music.stop();
     this.setBanner('GAME OVER', 3);
-    this.showStats('GAME OVER', 'TIRER pour continuer (reprise au point actuel)');
+    const out = this.continuesLimited && this.continuesLeft <= 0;
+    const hint = out ? 'Plus de continue pour cette zone — TIRER pour revenir au menu' : 'TIRER pour continuer (reprise au point actuel)' + (this.continuesLimited ? ` · ${this.continuesLeft} continue(s) restant(s)` : '');
+    this.showStats('GAME OVER', hint);
   }
-  showStats(title, hint) {
+  showStats(title, hint, best = null) {
     $('stTitle').textContent = title; $('stHint').textContent = hint;
-    $('stRows').innerHTML = this.players().map(p => { const g = p.g, acc = g.shots ? Math.round(100 * g.hits / g.shots) : 0; return `<div class="strow" style="color:${COLORS[p.slot]}"><b>J${p.slot + 1}</b> score ${g.score} · précision ${acc} % (${g.hits}/${g.shots}) · têtes ${g.headshots} · balles abattues ${g.bullets}</div>`; }).join('');
+    $('stRows').innerHTML = this.players().map(p => {
+      const g = p.g, acc = g.shots ? Math.round(100 * g.hits / g.shots) : 0;
+      const rankTxt = best ? ` · rang <b>${this.rankFor(p)}</b>` + (best[p.slot] > g.score ? ` · record ${best[p.slot]}` : ' · nouveau record') : '';
+      return `<div class="strow" style="color:${COLORS[p.slot]}"><b>J${p.slot + 1}</b> score ${g.score} · précision ${acc} % (${g.hits}/${g.shots}) · têtes ${g.headshots} · balles abattues ${g.bullets}${rankTxt}</div>`;
+    }).join('');
     $('stats').classList.remove('hidden');
   }
   timeOut() {
@@ -363,6 +421,7 @@ export class Game {
     this.draw2D(); this.updateHud();
   }
   update(dt, raw) {
+    if (this.state === 'paused' || this.state === 'calib') return;
     this.penalty = Math.max(0, this.penalty - raw * 0.08);
     if (this.state === 'title') this.camBase.look.x = this.level.points[0].look[0] + Math.sin(performance.now() / 4000) * 3;
     if (this.state === 'intro') { this.stateClock += raw; if (this.stateClock > 3.2) this.beginPoint(); }
@@ -375,7 +434,7 @@ export class Game {
     if (this.inFight && !this.bossDown) {
       this.timer -= dt;
       const sec = Math.ceil(this.timer);
-      if (sec !== this.lastTickSec && sec <= 10 && sec > 0) { this.audio.tick(sec <= 5); this.lastTickSec = sec; }
+      if (sec !== this.lastTickSec && sec <= 10 && sec > 0) { this.audio.tick(sec <= 5); this.lastTickSec = sec; this.net.forEach(p => this.net.send(p, { t: 'ev', k: 'urgent' })); }
       if (this.timer <= 10 && this.state === 'action') this.music.setIntense(true);
       if (this.timer <= 0) this.timeOut();
     }
@@ -440,6 +499,8 @@ export class Game {
     const c = this.ctx2, W = innerWidth, H = innerHeight, now = performance.now();
     c.clearRect(0, 0, W, H);
     if (this.state === 'title') this.drawTitle(c, W, H);
+    if (this.state === 'calib') this.drawCalib(c, W, H);
+    if (this.state === 'paused') this.drawPause(c, W, H);
     for (const p of this.players()) { const k = 1 - (now - p.g.hitAt) / 900; if (k > 0) { const g = c.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.8); g.addColorStop(0, 'rgba(255,0,0,0)'); g.addColorStop(1, `rgba(255,0,0,${0.55 * k})`); c.fillStyle = g; c.fillRect(0, 0, W, H); } }
     for (const e of this.enemies) for (const t of (e.telegraphs ? e.telegraphs() : [])) {
       const s = this.project(t.pos); if (s.behind) continue;
@@ -492,6 +553,29 @@ export class Game {
       c.fillStyle = '#9aa4b5'; c.font = '400 14px system-ui'; c.fillText({ docks: 'Extérieur · boss : blindé', street: 'Ville · boss : hélicoptère', hangar: 'Intérieur · boss : le colonel' }[L.theme], x + cw / 2, y + 118);
     });
     c.fillStyle = '#7b8494'; c.font = '400 13px system-ui'; c.fillText('Échap : revenir ici à tout moment · N : musique · M : son', W / 2, H * 0.9);
+  }
+  drawCalib(c, W, H) {
+    c.fillStyle = 'rgba(0,0,0,.7)'; c.fillRect(0, 0, W, H);
+    c.textAlign = 'center'; c.fillStyle = '#fff'; c.font = '900 40px system-ui';
+    c.fillText('CALIBRAGE DE LA VISÉE', W / 2, H * 0.16);
+    c.font = '500 18px system-ui'; c.fillStyle = '#cdd6e2';
+    c.fillText('Pointez le pistolet sur le repère et appuyez sur TIRER', W / 2, H * 0.16 + 34);
+    const targets = [{ x: 0.15, step: 0 }, { x: 0.85, step: 1 }];
+    for (const t of targets) {
+      const active = this.calibStep === t.step, done = this.calibStep > t.step;
+      const x = t.x * W, y = H * 0.5;
+      c.strokeStyle = done ? '#3ddc84' : (active ? '#ff4d4d' : '#3a4250'); c.lineWidth = active ? 4 : 2;
+      c.beginPath(); c.arc(x, y, active ? 40 + Math.sin(performance.now() / 200) * 6 : 34, 0, Math.PI * 2); c.stroke();
+      c.beginPath(); c.moveTo(x - 14, y); c.lineTo(x + 14, y); c.moveTo(x, y - 14); c.lineTo(x, y + 14); c.stroke();
+    }
+    if (this.calibStep === 2) { c.fillStyle = '#3ddc84'; c.font = '800 26px system-ui'; c.fillText('Calibrage terminé — sensibilité : ' + this.net.fovX + '°', W / 2, H * 0.5 + 90); }
+  }
+  drawPause(c, W, H) {
+    c.fillStyle = 'rgba(0,0,0,.7)'; c.fillRect(0, 0, W, H);
+    c.textAlign = 'center'; c.fillStyle = '#fff'; c.font = '900 56px system-ui'; c.fillText('PAUSE', W / 2, H * 0.42);
+    c.font = '500 18px system-ui'; c.fillStyle = '#cdd6e2';
+    c.fillText('Échap ou TIRER : reprendre', W / 2, H * 0.42 + 40);
+    c.fillText('Continues : ' + (this.continuesLimited ? this.continuesLeft + ' restant(s) par zone (C : illimités)' : 'illimités (C : limiter)'), W / 2, H * 0.42 + 70);
   }
   updateHud() {
     for (let i = 0; i < 2; i++) {
