@@ -116,7 +116,7 @@ export class Assets {
       for (let i = 0; i < d.length; i += 4) { const v = 135 + Math.random() * 50 + (kind === 'plates' && ((i / 4 / S | 0) % 64 < 2 || ((i / 4) % S) % 64 < 2) ? -60 : 0); d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
       c.putImageData(img, 0, 0);
       if (kind === 'grain') { c.globalAlpha = 0.25; c.fillStyle = '#000'; for (let k = 0; k < 40; k++) c.fillRect(Math.random() * S, Math.random() * S, Math.random() * 40, 1 + Math.random() * 2); }
-      if (kind === 'planks') { c.globalAlpha = 1; for (let y = 0; y < S; y += 32) { c.fillStyle = `rgba(${120 + Math.random() * 40},${85 + Math.random() * 30},${40 + Math.random() * 20},0.55)`; c.fillRect(0, y, S, 30); c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(0, y + 30, S, 2); } c.globalAlpha = 0.18; c.fillStyle = '#000'; for (let k = 0; k < 120; k++) c.fillRect(Math.random() * S, Math.random() * S, Math.random() * 60, 1); }
+      if (kind === 'planks') { c.globalAlpha = 1; for (let y = 0; y < S; y += 32) { c.fillStyle = `rgba(${95 + Math.random() * 30},${82 + Math.random() * 22},${62 + Math.random() * 16},0.6)`; c.fillRect(0, y, S, 30); c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(0, y + 30, S, 2); } c.globalAlpha = 0.18; c.fillStyle = '#000'; for (let k = 0; k < 120; k++) c.fillRect(Math.random() * S, Math.random() * S, Math.random() * 60, 1); }
       const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
       this._noise[kind] = t; return t;
     } catch (_) { return null; }
@@ -127,7 +127,7 @@ export class Assets {
       const n = this.noiseTexture(texName === 'wood' ? 'planks' : (texName === 'metal' || texName === 'container' ? 'plates' : 'grain'));
       if (!n) return new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.1, ...extra });
       const map = n.clone(); map.needsUpdate = true; map.repeat.set(repeat[0] * 2, repeat[1] * 2);
-      return new THREE.MeshStandardMaterial({ map, color: new THREE.Color(color).multiplyScalar(1.6), roughness: 0.85, metalness: 0.1, ...extra });
+      return new THREE.MeshStandardMaterial({ map, color: new THREE.Color(color).multiplyScalar(1.35), roughness: 0.85, metalness: 0.1, ...extra });
     }
     const map = t.clone(); map.needsUpdate = true; map.repeat.set(repeat[0], repeat[1]);
     return new THREE.MeshStandardMaterial({ map, color: 0xffffff, roughness: 0.85, metalness: 0.1, ...extra });

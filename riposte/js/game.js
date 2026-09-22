@@ -6,6 +6,7 @@ import { Assets } from './assets.js';
 import { LEVELS } from './levels.js';
 import { Enemy, Bullet, CFG, TYPES, clamp, smooth, rnd } from './entities.js';
 import { makeBoss } from './bosses.js';
+import { makeProp, CONTAINER_COLORS } from './props.js';
 import { loadSettings, saveSettings, saveHighScore, loadHighScores } from './settings.js';
 import { DIFFS, DIFF_ORDER } from './difficulty.js';
 
@@ -97,7 +98,7 @@ export class Game {
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.3;
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 260);
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 700);
     this.camBase = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
     this.hemi = new THREE.HemisphereLight(0x9cc0e8, 0x2a2118, 0.8); this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffdcb0, 1.7); this.sun.position.set(18, 26, -8); this.sun.castShadow = true;
@@ -147,7 +148,7 @@ export class Game {
       map.repeat.set(Math.max(1, Math.round((2 * Math.PI * R / Hc) / aspect)), 1);
     }
     else this._paintedSkyline(t);
-    const groundMat = A.scaled(t === 'hangar' ? 'concrete' : t === 'street' ? 'asphalt' : 'ground', { docks: 0x2b3038, street: 0x24262b, hangar: 0x3a3c40 }[t], 300, 300, 300, 2.5);
+    const groundMat = A.scaled(t === 'hangar' ? 'concrete' : 'asphalt', { docks: 0x2b3038, street: 0x24262b, hangar: 0x3a3c40 }[t], 300, 300, 300, 7, A.textures[t === 'hangar' ? 'concrete' : 'asphalt'] ? { color: 0x6a6d72 } : {});
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), groundMat); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; this.env.add(ground); this.envMeshes.push(ground);
     if (t === 'docks') this._themeDocks(); else if (t === 'street') this._themeStreet(); else this._themeHangar();
     // Couverts du joueur, caisses et plates-formes des ennemis, lampadaire par zone de combat
@@ -173,7 +174,9 @@ export class Game {
   }
   // Pose un objet 3D chargé (assets/props/<name>.glb) ; à défaut une boîte de la bonne matière, à l'échelle
   _propOrBox(name, w, h, d, tex, color, x, z, lookAtPos = null, rotY = null) {
-    const A = this.assets, obj = A.prop(name);
+    const A = this.assets;
+    let obj = A.prop(name);
+    if (!obj) obj = makeProp(name, { w, h, d, color: (name === 'conteneur' && typeof color === 'number') ? color : undefined });
     if (obj) {
       const g = new THREE.Group(); g.add(obj); g.position.set(x, 0, z);
       if (lookAtPos) g.lookAt(lookAtPos.x, 0, lookAtPos.z); if (rotY !== null) g.rotation.y = rotY;
@@ -202,7 +205,7 @@ export class Game {
     return g;
   }
   _themeDocks() {
-    const A = this.assets, cont = [0xb5482a, 0x2a6fb5, 0x3d8a3d, 0xb5a02a, 0x7a2ab5];
+    const A = this.assets, cont = CONTAINER_COLORS;
     const container = (x, z, i, rotY = 0) => { const g = this._propOrBox('conteneur', 2.4, 2.6, 6.1, 'container', cont[i % cont.length], x, z, null, rotY); return g; };
     for (let i = 0; i < 16; i++) { const x = i % 2 ? rnd(24, 34) : rnd(-18, -7), z = -rnd(4, 75); container(x, z, i); }
     for (let i = 0; i < 4; i++) container(rnd(-4, 22), -rnd(62, 78), i);
