@@ -99,7 +99,7 @@ export class Game {
   _initScene() {
     this.renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: true, powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.4;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 700);
     this.camBase = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
@@ -108,7 +108,7 @@ export class Game {
     const sc = this.sun.shadow; sc.mapSize.set(1536, 1536); sc.camera.near = 1; sc.camera.far = 120; sc.camera.left = -50; sc.camera.right = 50; sc.camera.top = 50; sc.camera.bottom = -50; sc.bias = -0.0008;
     this.scene.add(this.sun); this.scene.add(this.sun.target);
     // Contre-jour froid : détache les silhouettes du décor
-    this.rim = new THREE.DirectionalLight(0x7fb4ff, 1.2); this.scene.add(this.rim); this.scene.add(this.rim.target);
+    this.rim = new THREE.DirectionalLight(0x7fb4ff, 0.55); this.scene.add(this.rim); this.scene.add(this.rim.target);
     // Lumière d'appoint côté joueur (comble les faces sombres)
     this.fill = new THREE.PointLight(0xffe4c0, 8, 30, 1.2); this.scene.add(this.fill);
     this.sparkMax = 700;
@@ -135,7 +135,7 @@ export class Game {
     this.env = new THREE.Group(); this.env.userData.theme = level.theme; this.scene.add(this.env); this.envMeshes = [];
     const A = this.assets, t = level.theme;
     const sky = { docks: 0x16303a, street: 0x0f1320, hangar: 0x0a0b0d }[t];
-    this.scene.background = new THREE.Color(sky); this.scene.fog = new THREE.Fog(t === 'docks' ? 0x2a4650 : sky, t === 'hangar' ? 20 : 18, t === 'hangar' ? 70 : (A.backdrops[t] ? 150 : 110));
+    this.scene.background = new THREE.Color(sky); this.scene.fog = new THREE.Fog(t === 'docks' ? 0x22404a : sky, t === 'hangar' ? 22 : 28, t === 'hangar' ? 75 : (A.backdrops[t] ? 170 : 110));
     this.hemi.color.setHex({ docks: 0x9cc0e8, street: 0x9fb0d0, hangar: 0x8a9ab0 }[t]); this.hemi.intensity = t === 'hangar' ? 0.7 : 1.1;
     this.sun.color.setHex({ docks: 0xffd8a8, street: 0xffe0c0, hangar: 0xe8f0ff }[t]); this.sun.intensity = t === 'hangar' ? 1.4 : 2.6;
     // Fond panoramique lointain (texture si fournie, sinon ligne d'horizon peinte)
@@ -152,7 +152,7 @@ export class Game {
       map.repeat.set(Math.max(1, Math.round((2 * Math.PI * R / Hc) / aspect)), 1);
     }
     else this._paintedSkyline(t);
-    const groundMat = A.scaled(t === 'hangar' ? 'concrete' : 'asphalt', { docks: 0x2b3038, street: 0x24262b, hangar: 0x3a3c40 }[t], 300, 300, 300, 7, { ...(A.textures[t === 'hangar' ? 'concrete' : 'asphalt'] ? { color: 0x6a6d72 } : {}), roughness: t === 'hangar' ? 0.7 : 0.38, metalness: 0.15 });   // sol mouillé : reflets des lampes
+    const groundMat = A.scaled(t === 'hangar' ? 'concrete' : 'asphalt', { docks: 0x2b3038, street: 0x24262b, hangar: 0x3a3c40 }[t], 300, 300, 300, 7, { ...(A.textures[t === 'hangar' ? 'concrete' : 'asphalt'] ? { color: 0x6a6d72 } : {}), roughness: t === 'hangar' ? 0.7 : 0.5, metalness: 0.08 });   // sol humide : reflets discrets des lampes
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), groundMat); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; this.env.add(ground); this.envMeshes.push(ground);
     if (t === 'docks') this._themeDocks(); else if (t === 'street') this._themeStreet(); else this._themeHangar();
     // Couverts du joueur, caisses et plates-formes des ennemis, lampadaire par zone de combat

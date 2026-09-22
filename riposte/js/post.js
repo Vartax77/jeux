@@ -15,20 +15,20 @@ const GradeShader = {
     void main(){
       vec2 uv = vUv; vec2 d = (uv - 0.5);
       // aberration chromatique très légère vers les bords
-      float ca = 0.0015 * strength * dot(d, d) * 4.0;
+      float ca = 0.0004 * strength * dot(d, d) * 4.0;
       vec3 c; c.r = texture2D(tDiffuse, uv + d * ca).r; c.g = texture2D(tDiffuse, uv).g; c.b = texture2D(tDiffuse, uv - d * ca).b;
       float l = dot(c, vec3(0.299, 0.587, 0.114));
       // teal dans les ombres, orange dans les hautes lumières
-      vec3 shadow = vec3(0.86, 1.0, 1.08), high = vec3(1.08, 1.0, 0.86);
+      vec3 shadow = vec3(0.92, 1.0, 1.05), high = vec3(1.05, 1.0, 0.92);
       vec3 tint = mix(shadow, high, smoothstep(0.15, 0.75, l));
       c = mix(c, c * tint, strength);
       // contraste doux en S
-      c = mix(c, c * c * (3.0 - 2.0 * c), 0.35 * strength);
+      c = mix(c, c * c * (3.0 - 2.0 * c), 0.18 * strength);
       // vignette
-      float v = 1.0 - smoothstep(0.35, 0.95, length(d) * 1.35) * 0.45 * strength;
+      float v = 1.0 - smoothstep(0.45, 1.0, length(d) * 1.35) * 0.3 * strength;
       c *= v;
       // grain
-      c += (hash(uv * 1000.0 + time) - 0.5) * 0.035 * strength;
+      c += (hash(uv * 1000.0 + fract(time)) - 0.5) * 0.012 * strength;
       gl_FragColor = vec4(c, 1.0);
     }`,
 };
@@ -36,13 +36,15 @@ const GradeShader = {
 export class Post {
   constructor(renderer, scene, camera) {
     this.renderer = renderer; this.enabled = true;
-    this.composer = new EffectComposer(renderer);
+    // Cible multi-échantillonnée (MSAA ×4) et demi-flottante : l'anticrénelage est conservé et le bloom travaille en HDR
+    const r = renderer.getPixelRatio(), target = new THREE.WebGLRenderTarget(innerWidth * r, innerHeight * r, { samples: 4, type: THREE.HalfFloatType });
+    this.composer = new EffectComposer(renderer, target);
     this.composer.addPass(new RenderPass(scene, camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.6, 0.85);   // force, rayon, seuil : seules les lumières et flashs fleurissent
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.45, 1.05);   // seul ce qui dépasse le blanc fleurit : lampes, flashs, points faibles
     this.composer.addPass(this.bloom);
-    this.grade = new ShaderPass(GradeShader); this.composer.addPass(this.grade);
-    this.composer.addPass(new OutputPass());
+    this.composer.addPass(new OutputPass());                    // mappage tonal + sRGB d'abord…
+    this.grade = new ShaderPass(GradeShader); this.composer.addPass(this.grade);   // …puis l'étalonnage sur l'image finale, comme une LUT
   }
-  setSize(w, h) { this.composer.setSize(w, h); this.bloom.setSize(w, h); }
+  setSize(w, h) { const r = this.renderer.getPixelRatio(); this.composer.setSize(w, h); this.bloom.setSize(w, h); this.composer.renderTarget1.setSize(w * r, h * r); this.composer.renderTarget2.setSize(w * r, h * r); }
   render(dt) { this.grade.uniforms.time.value += dt; this.composer.render(dt); }
 }

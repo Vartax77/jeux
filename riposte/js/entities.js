@@ -31,7 +31,8 @@ export class Enemy {
     this.group.position.y = this.elevated ? this.baseY : this.baseY - 2.1;
     if (this.elevated) { this.char.kneel(); this.char.kneeling = false; }
     // Halo d'annonce
-    this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xff3030, transparent: true, opacity: 0, depthWrite: false }));
+    if (!Enemy.glowTex) { try { const S = 64, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d'); const g = c.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2); g.addColorStop(0, 'rgba(255,120,80,1)'); g.addColorStop(0.4, 'rgba(255,40,20,0.6)'); g.addColorStop(1, 'rgba(255,0,0,0)'); c.fillStyle = g; c.fillRect(0, 0, S, S); Enemy.glowTex = new THREE.CanvasTexture(cv); } catch (_) { Enemy.glowTex = null; } }
+    this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: Enemy.glowTex || undefined, color: 0xff4030, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.glow.scale.set(0.001, 0.001, 1); game.scene.add(this.glow);
     this.blob = new THREE.Mesh(new THREE.CircleGeometry(0.45, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }));
     this.blob.rotation.x = -Math.PI / 2; this.blob.position.y = 0.015; this.group.add(this.blob);
@@ -106,7 +107,7 @@ export class Enemy {
       case 'aim': {
         const k = clamp(this.clock / this.telegraph, 0, 1);
         this.glow.position.copy(this.gunTip());
-        this.glow.material.opacity = 0.2 + 0.8 * k; const s = 0.15 + 0.35 * k; this.glow.scale.set(s, s, 1);
+        this.glow.material.opacity = 0.15 + 0.6 * k; const s = 0.12 + 0.22 * k; this.glow.scale.set(s, s, 1);
         if (k >= 1) { this.fire(); this.enter('cool'); this.cool = rnd(...this.T.cooldown); }
         break; }
       case 'crawl': { if (this.clock > 2.0) { this.enter('cool'); this.cool = rnd(0.6, 1.2); } break; }
