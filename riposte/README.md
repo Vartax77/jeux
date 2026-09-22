@@ -90,6 +90,8 @@ Chaque fichier présent remplace la boîte correspondante dans le décor ; absen
 Le nom ne se voit pas dans le jeu ; ce qui compte est le fichier au bon nom. Un GLB fait 1 à 20 Mo ; viser *Simplify* 0.95 dans TRELLIS. Ajouter `wood.jpg` (planches) et refaire `container.jpg` (tôle ondulée seule) dans `assets/tex/` améliore les boîtes restantes.
 
 ### Fonds panoramiques — Runway
+Le jeu lit la couleur du ciel et de l'horizon dans l'image pour régler fond et brume. La position de l'horizon se règle dans `js/assets.js`, tableau `horizon` (fraction depuis le haut : 0,5 = milieu) : si le sol de l'image semble « monter », augmenter la valeur ; s'il « tombe », la diminuer.
+
 Paysage très large, **4096×1024** (rapport 4:1), horizon au milieu, sans texte ; le bord gauche doit raccorder avec le bord droit (demander « seamless horizontal panorama ») :
 | Fichier | Prompt |
 |---|---|

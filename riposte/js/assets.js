@@ -45,6 +45,8 @@ export const MANIFEST = {
     poubelle:   { file: 'assets/props/poubelle.glb',   height: 1.2 },
     bidon:      { file: 'assets/props/bidon.glb',      height: 0.6 },
   },
+  // Ligne d'horizon de chaque panorama, en fraction de la hauteur depuis le haut (0,5 = milieu). À ajuster si le sol de l'image « monte ».
+  horizon: { docks: 0.53, street: 0.50, hangar: 0.50 },
   // Panoramas de fond (paysage très large, 4096×1024 idéal, JPG), plaqués sur un cylindre lointain
   backdrops: {
     docks:  'assets/backdrops/docks.jpg',
@@ -54,7 +56,16 @@ export const MANIFEST = {
 };
 
 export class Assets {
-  constructor() { this.character = null; this.clips = {}; this.textures = {}; this.backdrops = {}; this.props = {}; this.report = []; }
+  constructor() { this.character = null; this.clips = {}; this.textures = {}; this.backdrops = {}; this.backdropInfo = {}; this.props = {}; this.report = []; }
+  // Mesure l'image : couleur moyenne du ciel (bande du haut) et couleur à l'horizon → réglage du fond et de la brume du jeu
+  analyzeBackdrop(img, horizonFrac) {
+    try {
+      const S = 64, cv = document.createElement('canvas'); cv.width = S; cv.height = S; const c = cv.getContext('2d'); c.drawImage(img, 0, 0, S, S);
+      const avg = (y0, y1) => { const d = c.getImageData(0, y0, S, y1 - y0).data; let r = 0, g = 0, b = 0, n = 0; for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; } return new THREE.Color(r / n / 255, g / n / 255, b / n / 255); };
+      const hy = Math.round(horizonFrac * S);
+      return { horizonFrac, sky: avg(0, Math.max(1, Math.round(S * 0.12))), horizon: avg(Math.max(0, hy - 3), Math.min(S, hy + 2)) };
+    } catch (_) { return { horizonFrac, sky: null, horizon: null }; }
+  }
 
   async load(onProgress = () => {}) {
     const fbx = new FBXLoader(), gltf = new GLTFLoader(), tex = new THREE.TextureLoader();
@@ -96,7 +107,9 @@ export class Assets {
     // Fonds
     for (const [name, url] of Object.entries(MANIFEST.backdrops)) steps.push(async () => {
       const t = await tryLoad(tex, url);
-      if (t) { t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; this.backdrops[name] = t; this.report.push('fond ' + name + ' : ok'); }
+      if (!t) return;
+      t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; this.backdrops[name] = t; this.report.push('fond ' + name + ' : ok');
+      this.backdropInfo[name] = this.analyzeBackdrop(t.image, MANIFEST.horizon[name] ?? 0.5);
     });
 
     let done = 0;

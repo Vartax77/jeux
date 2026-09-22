@@ -144,16 +144,25 @@ export class Game {
       // Le cylindre fait 754 m de tour pour 60 m de haut (12,6:1) : on répète l'image autant de fois qu'il faut pour garder ses proportions
       const img = back.image, aspect = img && img.width ? img.width / img.height : 4;
       const map = back.clone(); map.needsUpdate = true; map.repeat.set(Math.max(1, Math.round(12.6 / aspect)), 1);
-      // Rayon 320 m, hauteur 200 m : l'horizon de l'image (≈ 47 % de sa hauteur) est calé à la hauteur des yeux (1,6 m)
-      const R = 320, Hc = 200, horizonFrac = 0.47;
+      // Rayon 320 m, hauteur 200 m : la ligne d'horizon mesurée de l'image est calée à la hauteur des yeux (1,6 m)
+      const info = A.backdropInfo[t] || {}, R = 320, Hc = 200, horizonFrac = info.horizonFrac ?? 0.5;
+      if (info.sky) { this.scene.background = info.sky.clone(); }
+      if (info.horizon) { this.scene.fog.color.copy(info.horizon); }
       const cyl = new THREE.Mesh(new THREE.CylinderGeometry(R, R, Hc, 64, 1, true), new THREE.MeshBasicMaterial({ map, side: THREE.BackSide, fog: false, toneMapped: false }));
       cyl.position.set(7, 1.6 + (horizonFrac - 0.5) * Hc, -30); this.env.add(cyl);
       // Rideau de brume entre le décor et le fond : le loin se fond dans le panorama
       map.repeat.set(Math.max(1, Math.round((2 * Math.PI * R / Hc) / aspect)), 1);
+      try {
+        const S = 4, Hh = 64, cv = document.createElement('canvas'); cv.width = S; cv.height = Hh; const c = cv.getContext('2d');
+        const fc = this.scene.fog.color, g = c.createLinearGradient(0, 0, 0, Hh); g.addColorStop(0, `rgba(${fc.r * 255 | 0},${fc.g * 255 | 0},${fc.b * 255 | 0},0)`); g.addColorStop(0.55, `rgba(${fc.r * 255 | 0},${fc.g * 255 | 0},${fc.b * 255 | 0},0.85)`); g.addColorStop(1, `rgba(${fc.r * 255 | 0},${fc.g * 255 | 0},${fc.b * 255 | 0},1)`);
+        c.fillStyle = g; c.fillRect(0, 0, S, Hh);
+        const haze = new THREE.Mesh(new THREE.CylinderGeometry(R - 8, R - 8, 40, 64, 1, true), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+        haze.position.set(7, 1.6 + 8, -30); this.env.add(haze);   // du sol jusqu'à 28 m au-dessus de l'horizon : le loin se fond dans l'image
+      } catch (_) {}
     }
     else this._paintedSkyline(t);
-    const groundMat = A.scaled(t === 'hangar' ? 'concrete' : 'asphalt', { docks: 0x2b3038, street: 0x24262b, hangar: 0x3a3c40 }[t], 300, 300, 300, 7, { ...(A.textures[t === 'hangar' ? 'concrete' : 'asphalt'] ? { color: 0x6a6d72 } : {}), roughness: t === 'hangar' ? 0.7 : 0.5, metalness: 0.08 });   // sol humide : reflets discrets des lampes
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), groundMat); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; this.env.add(ground); this.envMeshes.push(ground);
+    const groundMat = A.scaled(t === 'hangar' ? 'concrete' : 'asphalt', { docks: 0x2b3038, street: 0x24262b, hangar: 0x3a3c40 }[t], 900, 900, 900, 7, { ...(A.textures[t === 'hangar' ? 'concrete' : 'asphalt'] ? { color: 0x6a6d72 } : {}), roughness: t === 'hangar' ? 0.7 : 0.5, metalness: 0.08 });   // sol humide : reflets discrets des lampes
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), groundMat); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; this.env.add(ground); this.envMeshes.push(ground);
     if (t === 'docks') this._themeDocks(); else if (t === 'street') this._themeStreet(); else this._themeHangar();
     // Couverts du joueur, caisses et plates-formes des ennemis, lampadaire par zone de combat
     for (const pt of level.points) {
