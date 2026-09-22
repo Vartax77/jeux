@@ -1,0 +1,34 @@
+# .graphifyignore — exclut les bibliothèques externes du graphe de connaissances.
+# Syntaxe gitignore complète (négation !, globs **, / final pour un dossier).
+#
+# Restent analysés : js/, index.html, tel.html, README.md, assets/
+
+# --- Vendor de ce dépôt (three.js, PeerJS, qrcode) ---
+lib/
+
+# --- Les mêmes bibliothèques, par nom, si elles sont un jour déplacées ---
+three.core.js
+three.module.js
+three.min.js
+peerjs.js
+peerjs.min.js
+qrcode.js
+**/jsm/
+
+# --- Tout fichier minifié ou bundlé : vendor par nature ---
+*.min.js
+*.min.mjs
+*.min.css
+*.bundle.js
+*.map
+
+# --- Emplacements vendor habituels, si ajoutés plus tard ---
+node_modules/
+bower_components/
+vendor/
+third_party/
+dist/
+build/
+
+# --- Sorties graphify : jamais une source ---
+graphify-out/
