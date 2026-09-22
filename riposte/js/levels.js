@@ -86,8 +86,10 @@ const RAW = [
 // y conservé (fenêtres, passerelles). Distance minimale 5 m pour ne pas coller au couvert.
 const NEAR = 0.6, MIN = 5;
 function pull(pt, pos, k) {
-  if (pos[1] > 0.1) {   // en hauteur : on rapproche seulement en profondeur, le x reste sur la structure qui le porte
-    const dz = pos[2] - pt[2]; return [pos[0], pos[1], pt[2] + Math.sign(dz) * Math.max(MIN, Math.abs(dz) * k)];
+  if (pos[1] > 0.1) {   // en hauteur : le x reste sur la structure ; la distance garantit qu'il reste dans le champ de la caméra
+    const dz = pos[2] - pt[2], dy = pos[1] + 1.2 - pt[1], dx = Math.abs(pos[0] - pt[0]);
+    const minD = Math.max(MIN, dy / Math.tan(20 * Math.PI / 180), dx / Math.tan(30 * Math.PI / 180));
+    return [pos[0], pos[1], pt[2] + Math.sign(dz) * Math.max(minD, Math.abs(dz) * k)];
   }
   const dx = pos[0] - pt[0], dz = pos[2] - pt[2], d = Math.hypot(dx, dz) || 1;
   const nd = Math.max(MIN, d * k);

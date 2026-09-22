@@ -250,10 +250,18 @@ export class Game {
     for (let z = 0; z > -90; z -= 6) { const l = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 3), lane); l.rotation.x = -Math.PI / 2; l.position.set(0, 0.01, z - 1.5); this.env.add(l); }
   }
   _themeHangar() {
-    const A = this.assets, wall = A.scaled('concrete', 0x2e3138, 100, 10, 100, 3), steel = A.scaled('metal', 0x50555e, 96, 1, 3, 2);
-    this._box(0.5, 10, 100, wall, -14.5, 5, -40); this._box(0.5, 10, 100, wall, 14.5, 5, -40);
-    this._box(30, 0.5, 100, wall, 0, 9.5, -40, { shadow: false });
-    this._box(30, 10, 0.5, wall, 0, 5, -80);
+    const A = this.assets, wall = A.scaled('brick', 0x6a5248, 100, 12, 100, 3), steel = A.scaled('metal', 0x50555e, 96, 1, 3, 2), truss = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.6, metalness: 0.5 });
+    this._box(0.5, 12, 100, wall, -14.5, 6, -40); this._box(0.5, 12, 100, wall, 14.5, 6, -40);
+    // Toit en tôle sombre, fermes métalliques tous les 8 m, lanterneaux qui laissent passer une lueur froide
+    this._box(30, 0.4, 100, new THREE.MeshStandardMaterial({ color: 0x2a2320, roughness: 0.9 }), 0, 12.2, -40, { shadow: false });
+    for (let z = -2; z > -80; z -= 8) { this._box(29, 0.35, 0.35, truss, 0, 11.6, z, { shadow: false, env: false }); for (let x = -12; x <= 12; x += 6) { const d = this._box(0.15, 0.15, 7.5, truss, x, 10.9, z, { shadow: false, env: false }); d.rotation.x = 0.6; } for (const sx of [-1, 1]) this._box(0.35, 12, 0.35, truss, sx * 14.1, 6, z, { shadow: false, env: false }); }
+    for (let z = -8; z > -76; z -= 16) { const sk = new THREE.Mesh(new THREE.PlaneGeometry(4, 8), new THREE.MeshBasicMaterial({ color: 0x9fb4d0 })); sk.rotation.x = Math.PI / 2; sk.position.set(0, 12.0, z); this.env.add(sk); }
+    // Grandes fenêtres industrielles à croisillons sur les deux murs
+    for (const side of [-1, 1]) for (let z = -8; z > -76; z -= 12) { const w = new THREE.Mesh(new THREE.PlaneGeometry(4, 5), new THREE.MeshBasicMaterial({ color: 0xbcd0e8 })); w.position.set(side * 14.22, 7, z); w.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2; this.env.add(w); for (let i = -1.5; i <= 1.5; i += 1) { const b = this._box(0.06, 5, 0.06, truss, side * 14.18, 7, z + i, { shadow: false, env: false }); } for (let j = -2; j <= 2; j += 1.25) this._box(0.06, 0.06, 4, truss, side * 14.18, 7 + j, z, { shadow: false, env: false }); }
+    // Grande porte ouverte au fond : le panorama et une lumière froide entrent par là
+    this._box(9, 12, 0.5, wall, -10.5, 6, -80); this._box(9, 12, 0.5, wall, 10.5, 6, -80); this._box(12, 3, 0.5, wall, 0, 10.5, -80);
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(12, 9), new THREE.MeshBasicMaterial({ color: 0xd8e6f8, transparent: true, opacity: 0.85 })); glow.position.set(0, 4.5, -80.4); this.env.add(glow);
+    const doorLight = new THREE.SpotLight(0xdde8ff, 120, 60, 0.7, 0.6, 1.1); doorLight.position.set(0, 6, -79); doorLight.target.position.set(0, 0, -50); this.env.add(doorLight); this.env.add(doorLight.target);
     for (const side of [-1, 1]) { this._box(3.2, 0.3, 96, steel, side * 11.4, 3.85, -40); this._box(0.08, 1.0, 96, steel, side * 9.85, 4.5, -40, { shadow: false }); for (let z = 0; z > -80; z -= 8) this._box(0.2, 4, 0.2, steel, side * 12.9, 2, z - 2); }
     for (let z = -6; z > -78; z -= 16) for (const side of [-1, 1]) { const l = new THREE.SpotLight(0xfff0d0, 40, 30, 0.6, 0.5, 1.2); l.position.set(side * 8, 9, z); l.target.position.set(side * 3, 0, z - 4); this.env.add(l); this.env.add(l.target); const cone = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.6, 10), new THREE.MeshBasicMaterial({ color: 0xfff0d0 })); cone.position.copy(l.position); this.env.add(cone); }
     for (let i = 0; i < 8; i++) this._propOrBox(['caisse', 'baril', 'palette', 'chariot'][i % 4], 1.2, 1.2, 1.2, 'wood', 0x8a6f48, rnd(-8, 8) + (i % 2 ? 6 : -6), -rnd(8, 74), null, rnd(0, Math.PI));
@@ -463,6 +471,10 @@ export class Game {
   explode(pos, size = 1, fire = false, radius = 0) {
     this.spawnSparks(pos, 0xffa040, 90 * size, 8, 1.1); this.spawnSparks(pos, 0xff3020, 40 * size, 4, 1.5);
     this.shake = Math.max(this.shake, 0.6 * size); this.audio.playerHit();
+    // Une seule lumière d'explosion pour toute la scène (une lumière par explosion faisait chuter la cadence à la mort des boss)
+    if (!this.blastLight) { this.blastLight = new THREE.PointLight(0xffa040, 0, 26, 1.5); this.scene.add(this.blastLight); }
+    this.blastLight.position.copy(pos).add(new THREE.Vector3(0, 1, 0)); this.blastLight.intensity = 320 * size; this.blastLight.distance = 26 * size;
+    if (this.fx.filter(f => f instanceof Blast).length > 4) { const old = this.fx.find(f => f instanceof Blast); old.done = true; }
     this.fx.push(new Blast(this, pos, size));
     if (fire) this.fx.push(new Fire(this, pos));
     if (radius > 0) for (const e of this.enemies) if (e.alive && !e.isBoss && e.group.position.distanceTo(pos) < radius) e.die(null, false);
@@ -522,6 +534,7 @@ export class Game {
     this.bullets = this.bullets.filter(b => { if (b.removed) b.dispose(); return !b.removed; });
     for (const f of this.fx) f.update(dt);
     this.fx = this.fx.filter(f => { if (f.done) f.dispose(); return !f.done; });
+    if (this.blastLight && this.blastLight.intensity > 0) this.blastLight.intensity = Math.max(0, this.blastLight.intensity - 700 * dt);
     this.updateSparks(dt);
   }
   updateCamera(raw) {
@@ -679,34 +692,59 @@ export class Game {
 }
 
 // ============================================================ Effets scriptés
-let _fireTex = null, _smokeTex = null;
+let _fireTex = null, _smokeTex = null, _ringTex = null;
+// Texture de feu : dégradé radial rongé par du bruit → boule turbulente, pas un disque lisse
+function fireTex() {
+  try { const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d');
+    const img = c.createImageData(S, S), d = img.data;
+    const n = (x, y) => { let v = 0, a = 1, f = 1 / 24; for (let o = 0; o < 4; o++) { v += a * (Math.sin(x * f * 1.7 + y * f * 0.9 + o * 3.1) * Math.cos(y * f * 1.3 - x * f * 0.6 + o * 1.7)); a *= 0.5; f *= 2; } return v * 0.5 + 0.5; };
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const dx = x - S / 2, dy = y - S / 2, r = Math.hypot(dx, dy) / (S / 2), i = (y * S + x) * 4;
+      const edge = Math.max(0, 1 - r * (0.75 + 0.5 * n(x, y)));            // bord irrégulier
+      const heat = Math.pow(edge, 0.7);
+      d[i] = 255; d[i + 1] = Math.round(120 + 135 * heat * heat); d[i + 2] = Math.round(40 * heat * heat * heat); d[i + 3] = Math.round(255 * Math.min(1, edge * 1.4));
+    }
+    c.putImageData(img, 0, 0); return new THREE.CanvasTexture(cv); } catch (_) { return null; }
+}
 function radialTex(inner, outer) {
   try { const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d');
     const g = c.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2); g.addColorStop(0, inner); g.addColorStop(0.5, outer); g.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = g; c.fillRect(0, 0, S, S); return new THREE.CanvasTexture(cv); } catch (_) { return null; }
 }
+function ringTex() {
+  try { const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d');
+    const g = c.createRadialGradient(S / 2, S / 2, S * 0.38, S / 2, S / 2, S / 2); g.addColorStop(0, 'rgba(255,220,160,0)'); g.addColorStop(0.5, 'rgba(255,220,160,0.8)'); g.addColorStop(1, 'rgba(255,220,160,0)');
+    c.fillStyle = g; c.fillRect(0, 0, S, S); return new THREE.CanvasTexture(cv); } catch (_) { return null; }
+}
 class Blast {
   constructor(game, pos, size = 1) {
     this.game = game; this.t = 0; this.done = false; this.size = size;
-    _fireTex = _fireTex || radialTex('rgba(255,240,180,1)', 'rgba(255,90,20,0.9)'); _smokeTex = _smokeTex || radialTex('rgba(40,40,40,0.9)', 'rgba(60,60,60,0.5)');
+    _fireTex = _fireTex || fireTex(); _smokeTex = _smokeTex || radialTex('rgba(30,30,30,0.95)', 'rgba(50,50,50,0.5)'); _ringTex = _ringTex || ringTex();
     this.balls = []; this.smoke = [];
-    for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _fireTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); sp.position.copy(pos).add(new THREE.Vector3(rnd(-0.6, 0.6), rnd(0, 1.2), rnd(-0.6, 0.6)).multiplyScalar(size)); sp.userData = { d: rnd(0, 0.12), s: rnd(2.5, 4.5) * size, v: rnd(1, 2.5) }; game.scene.add(sp); this.balls.push(sp); }
-    for (let i = 0; i < 5; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _smokeTex, transparent: true, depthWrite: false, opacity: 0.8 })); sp.position.copy(pos).add(new THREE.Vector3(rnd(-0.5, 0.5), rnd(0.5, 1.5), rnd(-0.5, 0.5)).multiplyScalar(size)); sp.userData = { d: rnd(0.15, 0.5), s: rnd(3, 6) * size, v: rnd(1.2, 2.2) }; game.scene.add(sp); this.smoke.push(sp); }
-    this.light = new THREE.PointLight(0xffa040, 260 * size, 22 * size, 1.5); this.light.position.copy(pos).add(new THREE.Vector3(0, 1, 0)); game.scene.add(this.light);
+    for (let i = 0; i < 7; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _fireTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, rotation: rnd(0, 6.3) })); sp.position.copy(pos).add(new THREE.Vector3(rnd(-0.7, 0.7), rnd(0, 1.3), rnd(-0.7, 0.7)).multiplyScalar(size)); sp.userData = { d: rnd(0, 0.15), s: rnd(2.2, 4.2) * size, v: rnd(1.5, 3), w: rnd(-1.5, 1.5) }; game.scene.add(sp); this.balls.push(sp); }
+    for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _smokeTex, transparent: true, depthWrite: false, opacity: 0.85, rotation: rnd(0, 6.3) })); sp.position.copy(pos).add(new THREE.Vector3(rnd(-0.6, 0.6), rnd(0.4, 1.6), rnd(-0.6, 0.6)).multiplyScalar(size)); sp.userData = { d: rnd(0.1, 0.6), s: rnd(3, 6.5) * size, v: rnd(1.0, 2.0), w: rnd(-0.4, 0.4) }; game.scene.add(sp); this.smoke.push(sp); }
+    this.ring = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: _ringTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); this.ring.rotation.x = -Math.PI / 2; this.ring.position.copy(pos).setY(0.08); game.scene.add(this.ring);
   }
   update(dt) {
     this.t += dt;
-    for (const b of this.balls) { const k = clamp((this.t - b.userData.d) / 0.7, 0, 1); const s = b.userData.s * (0.2 + 1.2 * Math.sqrt(k)); b.scale.set(s, s, 1); b.material.opacity = 1 - k; b.position.y += b.userData.v * dt; b.material.rotation += dt * 0.8; }
-    for (const s of this.smoke) { const k = clamp((this.t - s.userData.d) / 2.4, 0, 1); const sc = s.userData.s * (0.4 + k); s.scale.set(sc, sc, 1); s.material.opacity = 0.75 * (1 - k); s.position.y += s.userData.v * dt; s.material.rotation += dt * 0.3; }
-    this.light.intensity = Math.max(0, 260 * this.size * (1 - this.t / 0.9));
-    if (this.t > 3) this.done = true;
+    for (const b of this.balls) {
+      const k = clamp((this.t - b.userData.d) / 0.85, 0, 1); const s = b.userData.s * (0.15 + 1.1 * Math.sqrt(k)); b.scale.set(s, s, 1);
+      b.material.opacity = Math.pow(1 - k, 1.3); b.material.color.setRGB(1, 0.95 - 0.7 * k, 0.6 - 0.6 * k);   // blanc-jaune → orange → rouge sombre
+      b.position.y += b.userData.v * dt; b.material.rotation += b.userData.w * dt;
+    }
+    for (const s of this.smoke) { const k = clamp((this.t - s.userData.d) / 2.8, 0, 1); const sc = s.userData.s * (0.35 + k); s.scale.set(sc, sc, 1); s.material.opacity = 0.8 * (1 - k) * Math.min(1, k * 5); s.position.y += s.userData.v * dt; s.material.rotation += s.userData.w * dt; }
+    const rk = clamp(this.t / 0.5, 0, 1); const rs = 2 + 14 * this.size * rk; this.ring.scale.set(rs, rs, 1); this.ring.material.opacity = 1 - rk;
+    if (this.t > 3.4) this.done = true;
   }
-  dispose() { for (const s of [...this.balls, ...this.smoke]) { this.game.scene.remove(s); s.material.dispose(); } this.game.scene.remove(this.light); }
+  dispose() { for (const s of [...this.balls, ...this.smoke]) { this.game.scene.remove(s); s.material.dispose(); } this.game.scene.remove(this.ring); this.ring.material.dispose(); }
 }
 class Fire {
-  constructor(game, pos) { this.game = game; this.pos = pos.clone(); this.t = 0; this.done = false; this.light = new THREE.PointLight(0xff7a20, 40, 14, 1.5); this.light.position.copy(pos).add(new THREE.Vector3(0, 1, 0)); game.scene.add(this.light); }
-  update(dt) { this.t += dt; this.light.intensity = 30 + Math.sin(this.t * 30) * 12; if (Math.random() < 0.5) this.game.spawnSparks(this.pos.clone().add(new THREE.Vector3(rnd(-0.6, 0.6), 0.3, rnd(-0.6, 0.6))), 0xff8030, 2, 1.2, 0.9); if (this.t > 9) this.done = true; }
-  dispose() { this.game.scene.remove(this.light); }
+  constructor(game, pos) { this.game = game; this.pos = pos.clone(); this.t = 0; this.done = false; this.flames = [];
+    _fireTex = _fireTex || fireTex();
+    for (let i = 0; i < 3; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _fireTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xff9040 })); sp.position.copy(pos).add(new THREE.Vector3(rnd(-0.4, 0.4), 0.6, rnd(-0.4, 0.4))); sp.userData = { ph: rnd(0, 6) }; sp.scale.set(1.6, 2.2, 1); game.scene.add(sp); this.flames.push(sp); } }
+  update(dt) { this.t += dt; for (const f of this.flames) { const k = 0.8 + 0.35 * Math.sin(this.t * 9 + f.userData.ph); f.scale.set(1.5 * k, 2.4 * k, 1); f.material.opacity = Math.min(1, 9 - this.t) * 0.9; f.material.rotation = Math.sin(this.t * 3 + f.userData.ph) * 0.2; }
+    if (Math.random() < 0.3) this.game.spawnSparks(this.pos.clone().add(new THREE.Vector3(rnd(-0.5, 0.5), 0.4, rnd(-0.5, 0.5))), 0xff8030, 1, 1.2, 0.9); if (this.t > 9) this.done = true; }
+  dispose() { for (const f of this.flames) { this.game.scene.remove(f); f.material.dispose(); } }
 }
 class Drop {
   constructor(game, pos) { this.game = game; this.done = false; this.t = 0; this.mesh = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.5, 6), game.assets.material('container', 0xb5482a, [1, 2])); this.mesh.castShadow = true; this.mesh.position.copy(pos).add(new THREE.Vector3(0, 14, 0)); this.mesh.rotation.y = rnd(-0.4, 0.4); game.env.add(this.mesh); game.envMeshes.push(this.mesh); this.y0 = pos.y + 1.25; }
