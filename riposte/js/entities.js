@@ -147,7 +147,7 @@ export class Bullet {
     this.removed = true;
     const g = this.game, p = this.target, pan = (this.to.x - g.camBase.pos.x);
     if (this.onTarget && p.g && p.g.alive && !p.cover) g.damagePlayer(p, this.src);
-    else { g.audio.whoosh(clamp(pan, -1, 1)); if (this.kind === 'grenade') g.spawnSparks(this.mesh.position, 0xffa040, 30, 5, 0.8); }
+    else { if (this.kind === 'grenade') g.explode(this.mesh.position.clone(), 0.8); else g.audio.whoosh(clamp(pan, -1, 1)); }
   }
   shotDown(p, pan) {
     this.removed = true; p.g.hits++; p.g.bullets++;

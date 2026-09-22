@@ -35,7 +35,7 @@ class BossBase {
     this.game.streak += 3; this.game.onEnemyDied(this);
   }
   minions() { return this.game.enemies.filter(e => e !== this && e.alive).length; }
-  explosionTick(dt, center) { this.expT = (this.expT || 0) + dt; if (this.expT > 0.12) { this.expT = 0; const c = center.clone().add(new THREE.Vector3(rnd(-2, 2), rnd(0, 2), rnd(-2, 2))); this.game.spawnSparks(c, 0xffa040, 40, 6, 0.9); this.game.audio.bulletPop(this.pan(c)); this.game.shake = Math.max(this.game.shake, 0.4); } }
+  explosionTick(dt, center) { this.expT = (this.expT || 0) + dt; if (this.expT > 0.28) { this.expT = 0; const c = center.clone().add(new THREE.Vector3(rnd(-2, 2), rnd(0, 2), rnd(-2, 2))); this.game.explode(c, 0.7); } }
   dispose() { this.game.scene.remove(this.group); this.group.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
 }
 

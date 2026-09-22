@@ -20,13 +20,13 @@ const RAW = [
       { pos: [6, 1.6, -14], look: [14, 1.4, -26], cover: 'crate',
         waves: [
           { enemies: [e(G, 12, 0, -22), e(G, 16, 0, -26, 0.8), e(GR, 9, 0, -30, 1.6), e(R, 18, 0, -30, 2.6)] },
-          { enemies: [e(RU, 14, 0, -34), e(G, 10, 0, -24, 0.5), e(R, 17, 0, -24, 1.4), e(G, 13, 2.5, -28, 2.0), e(Y, 20, 0, -34, 3.0)],
+          { enemies: [e(RU, 14, 0, -34), e(G, 10, 0, -24, 0.5), e(R, 17, 0, -24, 1.4), e(G, 18, 2.6, -28, 2.0), e(Y, 20, 0, -34, 3.0)],
             events: [{ at: 0.5, type: 'explode', pos: [11, 0.6, -21] }] },
         ] },
       { pos: [14, 1.6, -30], look: [14, 1.4, -48], cover: 'crate',
         waves: [
           { enemies: [e(G, 10, 0, -42), e(G, 18, 0, -42), e(R, 14, 0, -46, 1.2), e(GR, 8, 0, -50, 2.0), e(RU, 19, 0, -52, 3.2)] },
-          { enemies: [e(R, 11, 0, -40), e(R, 17, 0, -40, 0.4), e(G, 14, 2.5, -44, 1.0), e(G, 9, 0, -48, 1.6), e(G, 20, 0, -48, 1.6), e(RU, 14, 0, -56, 2.8)] },
+          { enemies: [e(R, 11, 0, -40), e(R, 17, 0, -40, 0.4), e(G, 8, 2.6, -44, 1.0), e(G, 9, 0, -48, 1.6), e(G, 20, 0, -48, 1.6), e(RU, 14, 0, -56, 2.8)] },
         ],
         boss: { type: 'tank', pos: [14, 0, -50], time: 90 } },
     ] },
@@ -37,21 +37,21 @@ const RAW = [
     points: [
       { pos: [0, 1.6, 0], look: [0, 1.6, -16], cover: 'car',
         waves: [
-          { enemies: [e(G, -3, 0, -14), e(G, 3, 0, -16, 0.8), e(G, -6, 3.2, -20, 1.6), e(R, 6, 3.2, -18, 2.4)] },
-          { enemies: [e(R, 0, 0, -20), e(G, -7, 6.5, -24, 0.6), e(G, 7, 6.5, -22, 0.6), e(Y, 4, 0, -26, 1.8), e(GR, -4, 0, -28, 2.6)],
-            events: [{ at: 0.8, type: 'glass', pos: [-6, 3.2, -20] }] },
+          { enemies: [e(G, -3, 0, -14), e(G, 3, 0, -16, 0.8), e(G, -8.6, 3.2, -20, 1.6), e(R, 8.6, 3.2, -18, 2.4)] },
+          { enemies: [e(R, 0, 0, -20), e(G, -8.6, 6.5, -24, 0.6), e(G, 8.6, 6.5, -22, 0.6), e(Y, 4, 0, -26, 1.8), e(GR, -4, 0, -28, 2.6)],
+            events: [{ at: 0.8, type: 'glass', pos: [-8.6, 3.2, -20] }] },
         ] },
       { pos: [0, 1.6, -22], look: [0, 1.6, -40], cover: 'car',
         waves: [
-          { enemies: [e(G, -4, 0, -36), e(G, 4, 0, -36), e(RU, 0, 0, -44, 1.0), e(R, -7, 3.2, -38, 1.8), e(R, 7, 3.2, -34, 2.6)],
+          { enemies: [e(G, -4, 0, -36), e(G, 4, 0, -36), e(RU, 0, 0, -44, 1.0), e(R, -8.6, 3.2, -38, 1.8), e(R, 8.6, 3.2, -34, 2.6)],
             events: [{ at: 2.0, type: 'explode', pos: [3, 0.6, -33] }] },
-          { enemies: [e(G, -2, 0, -40), e(G, 2, 0, -40), e(GR, -7, 6.5, -42, 1.2), e(GR, 7, 6.5, -42, 1.2), e(R, 0, 3.2, -46, 2.2), e(Y, -5, 0, -48, 3.0)] },
-          { enemies: [e(RU, -3, 0, -50), e(RU, 3, 0, -50, 0.4), e(R, -7, 3.2, -44, 1.0), e(R, 7, 3.2, -44, 1.0), e(G, 0, 6.5, -48, 2.0)] },
+          { enemies: [e(G, -2, 0, -40), e(G, 2, 0, -40), e(GR, -8.6, 6.5, -42, 1.2), e(GR, 8.6, 6.5, -42, 1.2), e(R, 0, 2.6, -46, 2.2), e(Y, -5, 0, -48, 3.0)] },
+          { enemies: [e(RU, -3, 0, -50), e(RU, 3, 0, -50, 0.4), e(R, -8.6, 3.2, -44, 1.0), e(R, 8.6, 3.2, -44, 1.0), e(G, 0, 2.6, -48, 2.0)] },
         ] },
       { pos: [0, 1.6, -44], look: [0, 1.6, -62], cover: 'car',
         waves: [
-          { enemies: [e(G, -5, 0, -58), e(G, 5, 0, -58), e(G, 0, 0, -62, 0.8), e(R, -7, 3.2, -56, 1.6), e(R, 7, 6.5, -60, 2.4), e(GR, 0, 3.2, -66, 3.2)] },
-          { enemies: [e(R, -3, 0, -60), e(R, 3, 0, -60, 0.3), e(RU, 0, 0, -68, 1.0), e(G, -7, 6.5, -62, 1.5), e(G, 7, 6.5, -62, 1.5), e(Y, 0, 6.5, -70, 2.5)],
+          { enemies: [e(G, -5, 0, -58), e(G, 5, 0, -58), e(G, 0, 0, -62, 0.8), e(R, -8.6, 3.2, -56, 1.6), e(R, 8.6, 6.5, -60, 2.4), e(GR, 5, 2.6, -66, 3.2)] },
+          { enemies: [e(R, -3, 0, -60), e(R, 3, 0, -60, 0.3), e(RU, 0, 0, -68, 1.0), e(G, -8.6, 6.5, -62, 1.5), e(G, 8.6, 6.5, -62, 1.5), e(Y, -5, 2.6, -70, 2.5)],
             events: [{ at: 1.5, type: 'explode', pos: [-4, 0.6, -55] }] },
         ],
         boss: { type: 'heli', pos: [0, 7, -66], time: 100 } },
@@ -86,10 +86,13 @@ const RAW = [
 // y conservé (fenêtres, passerelles). Distance minimale 5 m pour ne pas coller au couvert.
 const NEAR = 0.6, MIN = 5;
 function pull(pt, pos, k) {
+  if (pos[1] > 0.1) {   // en hauteur : on rapproche seulement en profondeur, le x reste sur la structure qui le porte
+    const dz = pos[2] - pt[2]; return [pos[0], pos[1], pt[2] + Math.sign(dz) * Math.max(MIN, Math.abs(dz) * k)];
+  }
   const dx = pos[0] - pt[0], dz = pos[2] - pt[2], d = Math.hypot(dx, dz) || 1;
   const nd = Math.max(MIN, d * k);
   return [pt[0] + dx / d * nd, pos[1], pt[2] + dz / d * nd];
 }
 export const LEVELS = RAW.map(L => ({ ...L, points: L.points.map(pt => ({ ...pt,
-  waves: pt.waves.map(w => ({ ...w, enemies: w.enemies.map(e => ({ ...e, pos: pull(pt.pos, e.pos, NEAR) })), events: (w.events || []).map(ev => ({ ...ev, pos: pull(pt.pos, ev.pos, NEAR) })) })),
+  waves: pt.waves.map(w => ({ ...w, enemies: w.enemies.map(e => ({ ...e, pos: pull(pt.pos, e.pos, NEAR) })), events: (w.events || []) })),   // les événements de décor gardent leur place d'origine (hors des lignes de tir)
   boss: pt.boss ? { ...pt.boss, pos: pull(pt.pos, pt.boss.pos, 0.7) } : undefined })) }));

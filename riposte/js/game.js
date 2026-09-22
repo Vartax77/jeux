@@ -130,10 +130,10 @@ export class Game {
     if (this.env) { this.scene.remove(this.env); this.env.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); }
     this.env = new THREE.Group(); this.env.userData.theme = level.theme; this.scene.add(this.env); this.envMeshes = [];
     const A = this.assets, t = level.theme;
-    const sky = { docks: 0x0e1620, street: 0x141018, hangar: 0x0a0b0d }[t];
+    const sky = { docks: 0x0e1620, street: 0x0f1320, hangar: 0x0a0b0d }[t];
     this.scene.background = new THREE.Color(sky); this.scene.fog = new THREE.Fog(sky, t === 'hangar' ? 20 : 30, t === 'hangar' ? 70 : (A.backdrops[t] ? 230 : 110));
-    this.hemi.color.setHex({ docks: 0x9cc0e8, street: 0xc9a0d8, hangar: 0x8a9ab0 }[t]); this.hemi.intensity = t === 'hangar' ? 0.7 : 1.1;
-    this.sun.color.setHex({ docks: 0xffd8a8, street: 0xffc890, hangar: 0xe8f0ff }[t]); this.sun.intensity = t === 'hangar' ? 1.4 : 2.6;
+    this.hemi.color.setHex({ docks: 0x9cc0e8, street: 0x9fb0d0, hangar: 0x8a9ab0 }[t]); this.hemi.intensity = t === 'hangar' ? 0.7 : 1.1;
+    this.sun.color.setHex({ docks: 0xffd8a8, street: 0xffe0c0, hangar: 0xe8f0ff }[t]); this.sun.intensity = t === 'hangar' ? 1.4 : 2.6;
     // Fond panoramique lointain (texture si fournie, sinon ligne d'horizon peinte)
     const back = A.backdrops[t];
     if (back) {
@@ -156,8 +156,9 @@ export class Game {
       const p = new THREE.Vector3(...pt.pos), l = new THREE.Vector3(...pt.look), dir = l.clone().sub(p).setY(0).normalize();
       { const all = pt.waves.flatMap(w => w.enemies.map(e => e.pos)); if (all.length) {
           const cx = all.reduce((a, e) => a + e[0], 0) / all.length, cz = all.reduce((a, e) => a + e[2], 0) / all.length;
-          const side = dir.x > 0.3 ? -1 : 1, lx = cx + side * 3.5, lz = cz + 1.5;
-          if (t !== 'hangar') { if (!this._propOrBox('lampadaire', 0.18, 5.5, 0.18, 'metal', 0x555a66, lx, lz, null, side > 0 ? Math.PI : 0).isGroup) { const mat = A.material('metal', 0x555a66); this._box(1.2, 0.12, 0.3, mat, lx - side * 0.5, 5.5, lz, { shadow: false }); const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe8b0 })); bulb.position.set(lx - side * 1.0, 5.4, lz); this.env.add(bulb); } }
+          const side = dir.x > 0.3 ? -1 : 1, lx = t === 'street' ? side * 9.4 : cx + side * 7, lz = cz + 1.5;
+          if (t !== 'hangar') { const lp = this._propOrBox('lampadaire', 0.18, 5.5, 0.18, 'metal', 0x555a66, lx, lz, null, side > 0 ? Math.PI : 0); this.envMeshes = this.envMeshes.filter(m => m !== lp && m.parent !== lp);   // le mât ne bloque pas les tirs
+          if (!lp.isGroup) { const mat = A.material('metal', 0x555a66); this._box(1.2, 0.12, 0.3, mat, lx - side * 0.5, 5.5, lz, { shadow: false }); const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe8b0 })); bulb.position.set(lx - side * 1.0, 5.4, lz); this.env.add(bulb); } }
           const pl = new THREE.PointLight(0xffe0a0, t === 'hangar' ? 60 : 90, 26, 1.6); pl.position.set(lx - side * 1.0, t === 'hangar' ? 6.5 : 5.3, lz); this.env.add(pl);
       } }
       const c = p.clone().add(dir.clone().multiplyScalar(pt.cover === 'car' ? 2.6 : 1.9));
@@ -166,8 +167,17 @@ export class Game {
       for (const w of pt.waves) for (const e of w.enemies) {
         const ep = new THREE.Vector3(...e.pos), toCam = p.clone().sub(ep).setY(0).normalize();
         if (ep.y > 0.1) {
-          this._box(2.2, 0.3, 2.2, A.scaled('metal', 0x50555e, 2.2, 0.3, 2.2), ep.x, ep.y - 0.15, ep.z);
-          const rail = this._box(2.2, 0.5, 0.08, A.scaled('metal', 0x50555e, 2.2, 0.5, 0.08), ep.x, ep.y + 0.25, ep.z, { env: false }); rail.position.add(toCam.clone().multiplyScalar(1.05)); rail.lookAt(p.x, ep.y + 0.25, p.z);
+          if (t === 'street' && Math.abs(ep.x) > 7) {
+            // Balcon en fer accroché à la façade (x = ±10), avec consoles et garde-corps
+            const side = Math.sign(ep.x), steel = A.scaled('metal', 0x3a3d42, 2.6, 0.12, 2.0, 1);
+            this._box(2.6, 0.12, 2.0, steel, side * 9.0, ep.y - 0.06, ep.z);
+            for (const dz of [-0.9, 0.9]) { const br = this._box(1.6, 0.08, 0.08, steel, side * 9.2, ep.y - 0.7, ep.z + dz, { env: false }); br.rotation.z = side * 0.6; }
+            for (const dz of [-1, 1]) this._box(2.0, 0.9, 0.06, steel, side * 9.0, ep.y + 0.45, ep.z + dz, { env: false });
+            this._box(0.06, 0.9, 2.0, steel, side * 8.0, ep.y + 0.45, ep.z, { env: false });
+          } else if (t !== 'hangar') {
+            // Posé sur un conteneur (2,6 m)
+            this._propOrBox('conteneur', 2.4, 2.6, 6.1, 'container', CONTAINER_COLORS[(Math.abs(ep.x * 3 + ep.z) | 0) % CONTAINER_COLORS.length], ep.x, ep.z, p);   // axe long vers la caméra : ne masque personne
+          }
         } else { const cp = ep.clone().add(toCam.multiplyScalar(0.9)); this._propOrBox(['caisse', 'baril', 'palette'][(Math.abs(ep.x * 7 + ep.z) | 0) % 3], 1.3, 1.0, 0.7, 'wood', 0x8a6f48, cp.x, cp.z, p); }
       }
     }
@@ -215,6 +225,8 @@ export class Game {
     for (let i = 0; i < 4; i++) { const x = rnd(-80, 90), z = -rnd(70, 95); this._box(1.2, 30, 1.2, dark, x - 6, 15, z, { shadow: false, env: false }); this._box(1.2, 30, 1.2, dark, x + 6, 15, z, { shadow: false, env: false }); this._box(28, 1.5, 1.5, dark, x, 30, z, { shadow: false, env: false }); }
     // Petits objets près des zones de combat
     for (let i = 0; i < 10; i++) this._propOrBox(i % 2 ? 'palette' : 'baril', i % 2 ? 1.2 : 0.6, i % 2 ? 0.15 : 0.9, i % 2 ? 1.0 : 0.6, i % 2 ? 'wood' : 'metal', i % 2 ? 0x9a7a4a : 0x3a5a8a, rnd(-6, 22), -rnd(4, 60), null, rnd(0, Math.PI));
+    // Barils rouges explosifs près des caisses ennemies (un tir dessus abat tout ce qui est à 3,5 m)
+    for (const pt of this.level.points) for (const w of pt.waves) for (const e of w.enemies.slice(0, 1)) { const g = this._propOrBox('baril', 0.6, 0.9, 0.6, 'metal', 0x8a2a2a, e.pos[0] + 1.6, e.pos[2] + 0.4, null, 0); g.userData.explosive = true; g.traverse(o => { if (o.isMesh && o.material && o.material.color) o.material = o.material.clone(), o.material.color.setHex(0x8a2a2a); }); }
     for (let i = 0; i < 5; i++) { const x = i % 2 ? rnd(27, 36) : rnd(-18, -10), z = -rnd(5, 70); if (A.prop('grue')) { this._propOrBox('grue', 6, 22, 6, 'metal', 0x6b6f77, x, z, null, rnd(0, Math.PI)); continue; } const m = A.material('metal', 0x6b6f77); this._box(0.5, 12, 0.5, m, x - 2.5, 6, z, { shadow: false }); this._box(0.5, 12, 0.5, m, x + 2.5, 6, z, { shadow: false }); this._box(6, 0.4, 0.4, m, x, 11, z, { shadow: false }); }
     const water = new THREE.Mesh(new THREE.PlaneGeometry(300, 120), new THREE.MeshStandardMaterial({ color: 0x0b2a3a, roughness: 0.2, metalness: 0.6 })); water.rotation.x = -Math.PI / 2; water.position.set(0, 0.02, -140); this.env.add(water);
     const lineMat = new THREE.MeshStandardMaterial({ color: 0x9a8a3a, roughness: 1 });
@@ -224,7 +236,7 @@ export class Game {
     const A = this.assets;
     for (const side of [-1, 1]) {
       for (let z = 4; z > -90; z -= 12) {
-        const h = rnd(9, 14), m = this._box(6, h, 12, A.scaled('brick', side < 0 ? 0x5a3f36 : 0x4a4a55, 6, h, 12, 3), side * 13, h / 2, z - 6);
+        const h = rnd(9, 14), m = this._box(6, h, 12, A.scaled('brick', side < 0 ? 0x5a3f36 : 0x4a4a55, 6, h, 12, 3, A.textures.brick ? { color: 0x6a5248 } : {}), side * 13, h / 2, z - 6);
         for (let k = 0; k < 3; k++) for (const y of [2.2, 5.5, 8.5]) { if (y > h - 1) continue; const w = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.6), new THREE.MeshBasicMaterial({ color: Math.random() < 0.5 ? 0xffd27a : 0x22303a })); w.position.set(side * -3.02, y - h / 2, -4.5 + k * 3); w.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2; m.add(w); }
       }
       for (let z = -2; z > -80; z -= 14) this._box(0.25, 5, 0.25, A.material('metal', 0x555a66), side * 9, 2.5, z, { shadow: false });
@@ -299,6 +311,8 @@ export class Game {
     this.ringHits.push({ x: p.x, y: p.y, t: performance.now(), color: COLORS[p.slot], kind: 'shot' });
     if (o.userData.enemy) { o.userData.enemy.hit(o.userData.part, p, pan, o); return; }
     if (o.userData.bullet) { o.userData.bullet.shotDown(p, pan); return; }
+    let ex = o; while (ex && !ex.userData.explosive) ex = ex.parent;
+    if (ex && ex.userData.explosive) { ex.userData.explosive = false; const wp = ex.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.5, 0)); ex.visible = false; this.explode(wp, 1.2, true, 3.5); p.g.score += 100; return; }
     this.spawnSparks(h.point, 0xffd080, 14, 3); this.audio.ricochet(pan);
   }
 
@@ -440,11 +454,19 @@ export class Game {
   // ------------------------------------------------------------ Événements scriptés
   runEvent(ev) {
     const pos = new THREE.Vector3(...ev.pos);
-    if (ev.type === 'explode') { this.spawnSparks(pos, 0xffa040, 120, 8, 1.2); this.spawnSparks(pos, 0xff3020, 60, 4, 1.6); this.shake = 0.8; this.audio.playerHit(); this.fx.push(new Fire(this, pos)); }
+    if (ev.type === 'explode') this.explode(pos, 1.0, true);
     if (ev.type === 'drop') this.fx.push(new Drop(this, pos));
     if (ev.type === 'glass') { this.spawnSparks(pos, 0xbfe6ff, 80, 5, 1.0); this.audio.bulletPop(this.project(pos).x * 2 - 1); }
   }
 
+  // Explosion : sphère de feu qui gonfle et s'estompe, fumée qui monte, étincelles, lumière, secousse ; blesse les ennemis dans le rayon
+  explode(pos, size = 1, fire = false, radius = 0) {
+    this.spawnSparks(pos, 0xffa040, 90 * size, 8, 1.1); this.spawnSparks(pos, 0xff3020, 40 * size, 4, 1.5);
+    this.shake = Math.max(this.shake, 0.6 * size); this.audio.playerHit();
+    this.fx.push(new Blast(this, pos, size));
+    if (fire) this.fx.push(new Fire(this, pos));
+    if (radius > 0) for (const e of this.enemies) if (e.alive && !e.isBoss && e.group.position.distanceTo(pos) < radius) e.die(null, false);
+  }
   // ------------------------------------------------------------ Caméra
   _placeCamera(pt) { this.camBase.pos.set(...pt.pos); this.camBase.look.set(...pt.look); }
   project(v3) { const v = v3.clone().project(this.camera); return { x: (v.x + 1) / 2, y: (1 - v.y) / 2, behind: v.z > 1 }; }
@@ -657,6 +679,30 @@ export class Game {
 }
 
 // ============================================================ Effets scriptés
+let _fireTex = null, _smokeTex = null;
+function radialTex(inner, outer) {
+  try { const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d');
+    const g = c.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2); g.addColorStop(0, inner); g.addColorStop(0.5, outer); g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g; c.fillRect(0, 0, S, S); return new THREE.CanvasTexture(cv); } catch (_) { return null; }
+}
+class Blast {
+  constructor(game, pos, size = 1) {
+    this.game = game; this.t = 0; this.done = false; this.size = size;
+    _fireTex = _fireTex || radialTex('rgba(255,240,180,1)', 'rgba(255,90,20,0.9)'); _smokeTex = _smokeTex || radialTex('rgba(40,40,40,0.9)', 'rgba(60,60,60,0.5)');
+    this.balls = []; this.smoke = [];
+    for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _fireTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); sp.position.copy(pos).add(new THREE.Vector3(rnd(-0.6, 0.6), rnd(0, 1.2), rnd(-0.6, 0.6)).multiplyScalar(size)); sp.userData = { d: rnd(0, 0.12), s: rnd(2.5, 4.5) * size, v: rnd(1, 2.5) }; game.scene.add(sp); this.balls.push(sp); }
+    for (let i = 0; i < 5; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _smokeTex, transparent: true, depthWrite: false, opacity: 0.8 })); sp.position.copy(pos).add(new THREE.Vector3(rnd(-0.5, 0.5), rnd(0.5, 1.5), rnd(-0.5, 0.5)).multiplyScalar(size)); sp.userData = { d: rnd(0.15, 0.5), s: rnd(3, 6) * size, v: rnd(1.2, 2.2) }; game.scene.add(sp); this.smoke.push(sp); }
+    this.light = new THREE.PointLight(0xffa040, 260 * size, 22 * size, 1.5); this.light.position.copy(pos).add(new THREE.Vector3(0, 1, 0)); game.scene.add(this.light);
+  }
+  update(dt) {
+    this.t += dt;
+    for (const b of this.balls) { const k = clamp((this.t - b.userData.d) / 0.7, 0, 1); const s = b.userData.s * (0.2 + 1.2 * Math.sqrt(k)); b.scale.set(s, s, 1); b.material.opacity = 1 - k; b.position.y += b.userData.v * dt; b.material.rotation += dt * 0.8; }
+    for (const s of this.smoke) { const k = clamp((this.t - s.userData.d) / 2.4, 0, 1); const sc = s.userData.s * (0.4 + k); s.scale.set(sc, sc, 1); s.material.opacity = 0.75 * (1 - k); s.position.y += s.userData.v * dt; s.material.rotation += dt * 0.3; }
+    this.light.intensity = Math.max(0, 260 * this.size * (1 - this.t / 0.9));
+    if (this.t > 3) this.done = true;
+  }
+  dispose() { for (const s of [...this.balls, ...this.smoke]) { this.game.scene.remove(s); s.material.dispose(); } this.game.scene.remove(this.light); }
+}
 class Fire {
   constructor(game, pos) { this.game = game; this.pos = pos.clone(); this.t = 0; this.done = false; this.light = new THREE.PointLight(0xff7a20, 40, 14, 1.5); this.light.position.copy(pos).add(new THREE.Vector3(0, 1, 0)); game.scene.add(this.light); }
   update(dt) { this.t += dt; this.light.intensity = 30 + Math.sin(this.t * 30) * 12; if (Math.random() < 0.5) this.game.spawnSparks(this.pos.clone().add(new THREE.Vector3(rnd(-0.6, 0.6), 0.3, rnd(-0.6, 0.6))), 0xff8030, 2, 1.2, 0.9); if (this.t > 9) this.done = true; }
