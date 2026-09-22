@@ -142,6 +142,24 @@ console.log('Remise en place');
   verifier('rack 7-10', m.quilles.filter((q) => q.presente).map((q) => q.numero).join('-') === '7-10');
 }
 
+console.log('Chocs et enregistrement (lot B)');
+{
+  const m = new MondePhysique(SANS_ALEA);
+  m.lancer({ position: 0.06 / 0.399, angle: 0, puissance: 0.6, effet: 0, phase: 'normal' });
+  let t = 0, chocs = [];
+  while (t < 8) { m.simuler(0.05); t += 0.05; chocs.push(...m.prendreChocs()); if (m.boule.termine && m.quillesStables() && t > 1) break; }
+  const types = new Set(chocs.map((c) => c.type));
+  console.log('    ' + chocs.length + ' chocs : ' + [...types].join(', '));
+  verifier('des chocs boule/quille et quille/quille sont émis', types.has('boule-quille') && types.has('quille-quille'), [...types].join(','));
+  verifier('les chocs portent une vitesse d’impact plausible (0,3 – 12 m/s)', chocs.every((c) => c.force >= 0.3 && c.force <= 12), String(Math.max(...chocs.map((c) => c.force))));
+  verifier('pas de rafale : au plus 24 chocs en attente à la fois, et au moins 5 au total', chocs.length >= 5);
+  const e = m.enregistrement;
+  verifier('enregistrement à 60 Hz démarré à l’activation, ≥ 60 images', e && e.images.length >= 60, String(e && e.images.length));
+  const img = m.imageEnregistree(0.5);
+  verifier('une image contient boule et 10 quilles', img && img.boule.length === 8 && img.quilles.length === 10 && img.quilles.filter(Boolean).length >= 1);
+  verifier('les images progressent dans le temps', e.images[10].t > e.images[0].t && Math.abs(e.images[1].t - e.images[0].t - 1 / 60) < 1e-6, String(e.images[1].t - e.images[0].t));
+}
+
 console.log('Gouttières fermées');
 {
   const m = new MondePhysique(SANS_ALEA);

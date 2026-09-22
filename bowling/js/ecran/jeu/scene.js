@@ -511,6 +511,58 @@ export class Scene3D {
     }
   }
 
+  // Ralenti : applique une image enregistrée par la physique (positions/rotations à un instant donné).
+  synchroniserDepuisImage(img) {
+    if (!img) return;
+    const b = img.boule;
+    this.boule.visible = !!b[7];
+    if (b[7]) { this.boule.position.set(b[0], b[1], b[2]); this.boule.quaternion.set(b[3], b[4], b[5], b[6]); }
+    for (let i = 0; i < this.quilles.length; i++) {
+      const q = img.quilles[i], m = this.quilles[i];
+      m.visible = !!q;
+      if (q) { m.position.set(q[0], q[1], q[2]); m.quaternion.set(q[3], q[4], q[5], q[6]); }
+    }
+  }
+
+  // Panneau LED sous l'enseigne : texte courant (joueur, frame) ou annonce, optionnellement clignotant.
+  majPanneau(texte, { couleur = '#ffb347', clignote = false } = {}) {
+    if (!this.panneauLed) {
+      this.canvasLed = document.createElement('canvas');
+      this.canvasLed.width = 1024; this.canvasLed.height = 112;
+      this.textureLed = new THREE.CanvasTexture(this.canvasLed);
+      this.textureLed.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.MeshStandardMaterial({ map: this.textureLed, emissive: '#ffffff', emissiveMap: this.textureLed, emissiveIntensity: 1.1, roughness: 0.4 });
+      this.panneauLed = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 0.66), mat);
+      this.panneauLed.position.set(0, 1.08, -(DIM.longueurPiste + DIM.longueurDeck) - 0.14);
+      this.scene.add(this.panneauLed);
+    }
+    this.ledEtat = { texte: String(texte || ''), couleur, clignote, phase: 0 };
+    this._dessinerLed(true);
+  }
+
+  _dessinerLed(allume) {
+    const c = this.canvasLed, g = c.getContext('2d');
+    g.fillStyle = '#0b0d14';
+    g.fillRect(0, 0, c.width, c.height);
+    // Grille de LED discrète
+    g.fillStyle = '#141826';
+    for (let x = 8; x < c.width; x += 16) for (let y = 8; y < c.height; y += 16) g.fillRect(x, y, 3, 3);
+    if (allume && this.ledEtat.texte) {
+      g.fillStyle = this.ledEtat.couleur;
+      g.font = 'bold 76px "Trebuchet MS", "Segoe UI", system-ui, sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(this.ledEtat.texte.toUpperCase().slice(0, 26), c.width / 2, c.height / 2 + 4);
+    }
+    this.textureLed.needsUpdate = true;
+  }
+
+  // À appeler chaque image : gère le clignotement.
+  animerLed(t) {
+    if (!this.ledEtat || !this.ledEtat.clignote) return;
+    const allume = Math.floor(t * 4) % 2 === 0;
+    if (allume !== this.ledAllume) { this.ledAllume = allume; this._dessinerLed(allume); }
+  }
+
   // Boule au départ pendant la préparation (dans la main du personnage si fournie), guide de visée.
   majPreparation(visee, visible, positionMain = null) {
     this.guide.visible = visible;

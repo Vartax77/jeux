@@ -4,6 +4,7 @@
 export const NOMS_SONS = Object.freeze([
   'roulement', 'impact-faible', 'impact-moyen', 'impact-fort', 'gouttiere', 'rebond', 'pinsetter',
   'foule-acclamation', 'foule-ovation', 'foule-oh', 'foule-rire', 'clic',
+  'choc-boule-quille', 'choc-quille-quille', 'choc-quille-sol', 'choc-quille-paroi', 'choc-boule-paroi', 'choc-boule-sol',
   'jingle-strike', 'jingle-spare', 'jingle-turkey', 'jingle-parfait', 'musique',
 ]);
 
@@ -72,8 +73,8 @@ export class AudioJeu {
       const s = this.ctx.createBufferSource();
       s.buffer = buf;
       const g = this.ctx.createGain();
-      g.gain.value = options.gain ?? 1;
-      s.playbackRate.value = options.vitesse ?? 1;
+      g.gain.value = options.gain ?? (options.vitesse != null && nom.startsWith('choc') ? Math.min(1, 0.25 + options.vitesse / 8) : 1);
+      s.playbackRate.value = options.lecture ?? (nom.startsWith('choc') ? 0.9 + Math.random() * 0.2 : 1);
       s.connect(g).connect(dest);
       s.start();
       return;
@@ -134,6 +135,22 @@ export class AudioJeu {
     }
     this._ton(dest, 120, t0, 0.18, { type: 'sine', niveau: niveau * 0.6, glisse: 0.5 });
   }
+
+  // Chocs synchronisés sur les contacts réels du moteur : niveau et hauteur selon la vitesse d'impact.
+  // vitesse ≈ 1 m/s (frôlement) → 8 m/s (choc violent).
+  _choc(dest, vitesse, { grave = 700, aigu = 2600, niveau = 0.5, duree = 0.09, boisNiveau = 0.15 } = {}) {
+    const t0 = this.ctx.currentTime;
+    const f = Math.min(1, Math.max(0, (vitesse - 0.5) / 7));
+    const n = niveau * (0.25 + 0.75 * f);
+    this._souffle(dest, t0, duree, { niveau: n, freq: grave + (aigu - grave) * (0.4 + Math.random() * 0.6), q: 1.2, glisse: 0.3 });
+    this._ton(dest, 380 + Math.random() * 260, t0, duree * 0.8, { type: 'square', niveau: n * boisNiveau, glisse: 0.45 });
+  }
+  _s_choc_boule_quille(dest, o = {}) { this._choc(dest, o.vitesse ?? 4, { grave: 900, aigu: 2400, niveau: 0.7, duree: 0.11, boisNiveau: 0.25 }); this._ton(dest, 110, this.ctx.currentTime, 0.14, { type: 'sine', niveau: 0.35 * Math.min(1, (o.vitesse ?? 4) / 6), glisse: 0.5 }); }
+  _s_choc_quille_quille(dest, o = {}) { this._choc(dest, o.vitesse ?? 3, { grave: 1400, aigu: 3600, niveau: 0.55, duree: 0.07, boisNiveau: 0.2 }); }
+  _s_choc_quille_sol(dest, o = {}) { this._choc(dest, o.vitesse ?? 2, { grave: 300, aigu: 900, niveau: 0.35, duree: 0.08, boisNiveau: 0.1 }); }
+  _s_choc_quille_paroi(dest, o = {}) { this._choc(dest, o.vitesse ?? 3, { grave: 200, aigu: 700, niveau: 0.45, duree: 0.12, boisNiveau: 0.08 }); }
+  _s_choc_boule_paroi(dest, o = {}) { this._choc(dest, o.vitesse ?? 3, { grave: 150, aigu: 500, niveau: 0.5, duree: 0.16, boisNiveau: 0.05 }); }
+  _s_choc_boule_sol(dest, o = {}) { this._ton(dest, 140, this.ctx.currentTime, 0.16, { type: 'sine', niveau: 0.5 * Math.min(1, (o.vitesse ?? 2) / 4), glisse: 0.55 }); }
 
   _s_gouttiere(dest) {
     const t0 = this.ctx.currentTime;

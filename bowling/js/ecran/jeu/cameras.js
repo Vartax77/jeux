@@ -87,6 +87,12 @@ export class Cameras {
         }
         break;
       }
+      case 'ralenti': {
+        const s = ctx.cote || 1;
+        p.set(s * 1.7, 0.7, -L + 1.6);
+        r.set(0, 0.25, -L - 0.4);
+        break;
+      }
       case 'resultat':
         p.set(0, 1.5, -L + 4.2);
         r.set(0, 0.35, -L - 0.4);

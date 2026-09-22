@@ -47,7 +47,7 @@ const DEFAUTS = {
   masseBoule: 6.8, masseQuille: 1.4, frottementPiste: 0.04, rebondPiste: 0.05,
   frottementQuille: 0.25, rebondQuille: 0.4, frottementBouleQuille: 0.1, rebondBouleQuille: 0.4,
   frottementQuilleQuille: 0.1, rebondQuilleQuille: 0.7, rebondKickback: 0.75, resistanceRoulement: 2.5,
-  amortissementQuille: 0.08, delaiMaxQuilles: 4, seuilChute: 40, deplacementChute: 0.3, glisseInitiale: 0.9,
+  amortissementQuille: 0.08, delaiMaxQuilles: 4, seuilChute: 35, deplacementChute: 0.3, glisseInitiale: 0.9,
   gouttieresFermees: false, formeQuille: 'spheres', inertieQuille: 1, aleaQuilles: 0.1,
 };
 
@@ -86,6 +86,70 @@ export class MondePhysique {
     this._creerQuilles();
     this.bumpers = null;
     this.reglerBumpers(!!this.lire('gouttieresFermees'));
+    // Chocs : chaque contact réel du moteur produit un événement { type, force, x, z } lu par l'écran (sons synchronisés).
+    this.chocs = [];
+    this._derniersChocs = new Map();
+    this._ecouterChocs();
+    // Enregistrement de l'action de quilles (ralenti) : instantanés à 60 Hz pendant que les quilles sont actives.
+    this.enregistrement = null;
+  }
+
+  _ecouterChocs() {
+    const typeDe = (corps) => (corps === this.boule.corps ? 'boule' : corps.estQuille ? 'quille' : corps.material === this.matKickback ? 'kickback' : corps.material === this.matBumper ? 'bumper' : 'piste');
+    const surChoc = (e) => {
+      const a = e.target, b = e.body;
+      const ta = typeDe(a), tb = typeDe(b);
+      const force = Math.abs(e.contact.getImpactVelocityAlongNormal());
+      let type = null;
+      if ((ta === 'boule' && tb === 'quille') || (ta === 'quille' && tb === 'boule')) type = 'boule-quille';
+      else if (ta === 'quille' && tb === 'quille') type = 'quille-quille';
+      else if (ta === 'quille' && (tb === 'piste' || tb === 'kickback')) type = tb === 'kickback' ? 'quille-paroi' : 'quille-sol';
+      else if (ta === 'boule' && (tb === 'kickback' || tb === 'bumper')) type = 'boule-paroi';
+      else if (ta === 'boule' && tb === 'piste' && force > 1.2) type = 'boule-sol';
+      if (!type) return;
+      const seuil = type === 'quille-sol' ? 0.6 : type === 'boule-sol' ? 1.2 : 0.35;
+      if (force < seuil) return;
+      // Un même couple ne sonne pas plus d'une fois par 60 ms (contacts multiples d'une même collision)
+      const cle = (a.id < b.id ? a.id + '-' + b.id : b.id + '-' + a.id);
+      const t = this.temps;
+      if (this._derniersChocs.get(cle) > t - 0.06) return;
+      this._derniersChocs.set(cle, t);
+      if (this.chocs.length < 24) this.chocs.push({ type, force, x: e.contact.bi.position.x, z: e.contact.bi.position.z, t });
+    };
+    this.boule.corps.addEventListener('collide', surChoc);
+    for (const q of this.quilles) { q.corps.estQuille = true; q.corps.addEventListener('collide', surChoc); }
+  }
+
+  // Vide et retourne les chocs survenus depuis le dernier appel.
+  prendreChocs() { const c = this.chocs; this.chocs = []; return c; }
+
+  // ---------- Enregistrement pour le ralenti ----------
+
+  _enregistrer() {
+    const e = this.enregistrement;
+    if (!e || !e.actif) return;
+    e.compteur = (e.compteur || 0) + 1;
+    if (e.compteur % 4 !== 0) return;   // 240 Hz → 60 Hz
+    if (e.images.length >= 480) { e.actif = false; return; }
+    const b = this.boule.corps;
+    e.images.push({
+      t: this.temps - e.debut,
+      boule: [b.position.x, b.position.y, b.position.z, b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w, this.boule.enJeu && !this.boule.termine],
+      quilles: this.quilles.map((q) => (q.presente ? [q.corps.position.x, q.corps.position.y, q.corps.position.z, q.corps.quaternion.x, q.corps.quaternion.y, q.corps.quaternion.z, q.corps.quaternion.w] : null)),
+    });
+  }
+
+  demarrerEnregistrement() { this.enregistrement = { actif: true, debut: this.temps, images: [], compteur: 0 }; }
+  arreterEnregistrement() { if (this.enregistrement) this.enregistrement.actif = false; }
+
+  // Image enregistrée la plus proche d'un instant (s depuis le début de l'enregistrement).
+  imageEnregistree(t) {
+    const e = this.enregistrement;
+    if (!e || !e.images.length) return null;
+    let i = Math.round(t * 60);
+    if (i < 0) i = 0;
+    if (i >= e.images.length) i = e.images.length - 1;
+    return e.images[i];
   }
 
   // ---------- Construction ----------
@@ -229,6 +293,7 @@ export class MondePhysique {
   // Ajoute au monde toutes les quilles présentes (elles deviennent dynamiques).
   activerQuilles() {
     if (this.quillesActives) return;
+    this.demarrerEnregistrement();
     for (const q of this.quilles) {
       if (!q.presente || q.active) continue;
       this.world.addBody(q.corps);
@@ -258,7 +323,9 @@ export class MondePhysique {
       const c = q.corps;
       c.quaternion.vmult(new CANNON.Vec3(0, 1, 0), haut);
       const dx = c.position.x - q.initiale.x, dz = c.position.z - q.initiale.z;
-      const tombee = haut.y < cosSeuil || Math.hypot(dx, dz) > depl || c.position.y < DIM.centreGraviteQuille - 0.12;
+      // Règle du bowling : une quille inclinée qui s'appuie contre une paroi du deck est comptée tombée
+      const contreParoi = haut.y < Math.cos(15 * Math.PI / 180) && Math.abs(c.position.x) > DIM.largeurPiste / 2 + 0.08;
+      const tombee = haut.y < cosSeuil || contreParoi || Math.hypot(dx, dz) > depl || c.position.y < DIM.centreGraviteQuille - 0.12;
       q.debout = !tombee;
       tombees.push(tombee);
     }
@@ -456,6 +523,7 @@ export class MondePhysique {
     this.temps += this.pasFixe;
     this._suivreBoule();
     this._suivreQuilles();
+    this._enregistrer();
   }
 
   // Étape de la simulation de durée arbitraire (tests).

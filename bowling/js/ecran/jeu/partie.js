@@ -4,7 +4,7 @@
 
 import { DIM } from './physique.js';
 
-const PHASES = ['preparation', 'roulement', 'impact', 'resultat', 'remise'];
+const PHASES = ['preparation', 'roulement', 'impact', 'resultat', 'ralenti', 'remise'];
 
 export class Partie extends EventTarget {
   constructor(physique, lire) {
@@ -25,6 +25,7 @@ export class Partie extends EventTarget {
     this.remiseFaite = false;
     this.verrouille = false;   // true : aucun lancer accepté (salon, fin de partie)
     this.suivant = null;       // hook (res) => { mode: 'respot'|'rack', boule, frame, fin } fourni par le match (lot 3)
+    this.ralenti = null;       // hook (res) => bool : jouer un ralenti de l'action de quilles
     this.prochain = null;
     this.phys.nouveauRack();
   }
@@ -100,7 +101,7 @@ export class Partie extends EventTarget {
       this._compter();
       return true;
     }
-    if (this.phase === 'resultat') { this._demarrerRemise(); return true; }
+    if (this.phase === 'resultat' || this.phase === 'ralenti') { this._demarrerRemise(); return true; }
     if (this.phase === 'remise') { this._finirRemise(); return true; }
     return false;
   }
@@ -132,6 +133,9 @@ export class Partie extends EventTarget {
       case 'resultat':
         if (this.chrono > this.lire('dureeResultat', 2.5)) this._demarrerRemise();
         break;
+      case 'ralenti':
+        if (this.chrono > this.lire('dureeRalenti', 2.8)) this._demarrerRemise();
+        break;
       case 'remise': {
         const duree = this.lire('dureeRemise', 2.6);
         // Respot : les quilles couchées sont retirées après le balayage (78 %) ; rack complet : dès la fin du balayage (50 %)
@@ -155,11 +159,14 @@ export class Partie extends EventTarget {
       joueur: this.lanceur, nom: this.lance ? this.lance.nom : '', puissance: this.lance ? this.lance.puissance : 0, effet: this.lance ? this.lance.effet : 0,
     };
     this.phys.rangerBoule();
+    this.phys.arreterEnregistrement();
     this.dernier = res;
     this.prochain = this.suivant ? this.suivant(res) : null;
     this.modeRemise = this.prochain ? this.prochain.mode : ((this.boule === 1 && e.nbDebout > 0) ? 'respot' : 'rack');
     this._changerPhase('resultat');
     this._emettre('resultat', res);
+    // Ralenti (strike, spare…) : décidé par l'écran via le hook `ralenti`, joué après l'annonce
+    if (this.ralenti && this.ralenti(res) && this.phys.enregistrement && this.phys.enregistrement.images.length > 10) this._changerPhase('ralenti');
   }
 
   _demarrerRemise() {

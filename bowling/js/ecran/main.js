@@ -162,6 +162,7 @@ async function demarrerRendu() {
     scene.scene.add(spectateurs.groupe);
     redimensionner();
     cameras.definir(MODE === 'partie' ? 'titre' : 'preparation', contexteCamera(), true);
+    if (MODE === 'partie') majPanneauAccueil(); else scene.majPanneau(MODES[MODE].titre);
   } catch (e) {
     scene = null; cameras = null; renderer = null;
     $('sans-webgl').classList.remove('cache');
@@ -180,7 +181,7 @@ function contexteCamera() {
   return { visee: partie.visee, boule: { x: b.x, y: b.y, z: b.z }, cote: partie.coteImpact };
 }
 
-const PLAN_PAR_PHASE = { preparation: 'preparation', roulement: 'roulement', impact: 'impact', resultat: 'resultat', remise: 'remise' };
+const PLAN_PAR_PHASE = { preparation: 'preparation', roulement: 'roulement', impact: 'impact', resultat: 'resultat', ralenti: 'ralenti', remise: 'remise' };
 
 partie.addEventListener('phase', (e) => {
   const { phase, boule, frame } = e.detail;
@@ -188,7 +189,8 @@ partie.addEventListener('phase', (e) => {
   // Hors préparation, le HUD garde le nom du lanceur (le match a déjà pu passer au joueur suivant).
   const nom = phase === 'preparation' ? (jc ? jc.nom : '') : (partie.lance ? partie.lance.nom : (jc ? jc.nom : ''));
   hud.majEtat({ phase, boule, frame, debout: partie.debout, joueur: nom });
-  if (cameras) cameras.definir(PLAN_PAR_PHASE[phase] || 'preparation', contexteCamera(), phase === 'impact' && lire('planImpact') === 'cote');
+  if (cameras) cameras.definir(PLAN_PAR_PHASE[phase] || 'preparation', contexteCamera(), (phase === 'impact' && lire('planImpact') === 'cote') || phase === 'ralenti');
+  if (phase === 'ralenti') hud.message('Ralenti', 1);
   if (phase !== 'preparation') { hud.majTour({}); envoyerEtatATous(); }
 });
 partie.addEventListener('lancer', (e) => {
@@ -219,6 +221,7 @@ partie.addEventListener('resultat', (e) => {
   } else if (rm && rm.joueur) c = calloutScore(rm.joueur.feuille, { quilles: r.tombees, strike: rm.strike, spare: rm.spare, tombees: r.quilles, gouttiere: r.gouttiere, phaseLancer: r.phaseLancer, boule: rm.boule });
   else c = hud.texteResultat(r);
   if (lire('calloutsActifs') !== false) hud.annoncer(c.texte, c.classe, Math.max(1.5, lire('dureeResultat') || 2.5));
+  if (scene) scene.majPanneau(c.texte, { couleur: c.classe === 'strike' || c.classe === 'turkey' || c.classe === 'parfaite' ? '#ffd54a' : c.classe === 'spare' ? '#7ee2a2' : c.classe === 'gouttiere' || c.classe === 'zero' || c.classe === 'split' ? '#ff9a90' : '#ffb347', clignote: c.classe !== '' });
   hud.majEtat({ debout: r.debout });
   reagir(c, r);
   banc.noter((r.nom || 'Clavier') + ' : ' + r.tombees + ' quille' + (r.tombees > 1 ? 's' : '') + ' — ' + c.texte.toLowerCase());
@@ -232,6 +235,15 @@ partie.addEventListener('resultat', (e) => {
   dernierResultatMatch = null;
 });
 partie.addEventListener('remise', () => { audio.jouer('pinsetter'); });
+
+// Ralenti : sur strike/spare (ou toujours), rejoué depuis l'enregistrement de la physique, caméra de côté.
+partie.ralenti = (res) => {
+  if (!scene) return false;
+  const mode = lire('ralentiStrike') || 'strike';
+  if (mode === 'aucun') return false;
+  if (mode === 'tous') return (res.tombees || 0) > 0;
+  return !!(res.strike || res.spare) || (dernierResultatMatch && (dernierResultatMatch.strike || dernierResultatMatch.spare));
+};
 
 // Réactions du personnage, des spectateurs et de la foule selon le résultat.
 function reagir(c, r) {
@@ -318,6 +330,7 @@ function demarrerTour() {
   tourClavier = false;
   bot.arreter();
   if (scene) scene.couleurBoule(couleurHex(jc.couleur), joueurPro(jc));
+  if (scene) { const pos0 = match.position(); scene.majPanneau(jc.nom + ' · frame ' + (pos0 ? pos0.frame : 1) + ' · boule ' + (pos0 ? pos0.boule : 1)); }
   if (personnage) personnage.appliquerProfil(profilPersonnage(jc));
   scoreboard.rendre(match);
   const pos = match.position();
@@ -561,7 +574,11 @@ function boucle(maintenant) {
   suivreSons(dt);
   enregistrerTrace();
   if (scene) {
-    scene.synchroniser(phys);
+    if (partie.phase === 'ralenti') {
+      const img = phys.imageEnregistree(partie.chrono * (Number(lire('vitesseRalenti')) || 0.35));
+      if (img) scene.synchroniserDepuisImage(img); else scene.synchroniser(phys);
+    } else scene.synchroniser(phys);
+    scene.animerLed(tempsGlobal);
     scene.afficherTrace(partie.phase === 'preparation' && lire('traceDernierLancer') !== false);
     if (personnage) {
       personnage.placer(partie.visee.position * (DIM.largeurPiste / 2 - DIM.rayonBoule - 0.02));
@@ -649,15 +666,18 @@ function suivreSons() {
     const p = b.corps.position, v = b.corps.velocity;
     const surSol = p.y < DIM.rayonBoule + 0.03;
     audio.majRoulement(v.length(), surSol);
-    if (!sons.impact && p.z < -DIM.longueurPiste + 0.25 && !b.gouttiere) {
-      sons.impact = true;
-      const vit = v.length();
-      audio.jouer(vit > 7 ? 'impact-fort' : vit > 5 ? 'impact-moyen' : 'impact-faible');
-    }
     if (b.gouttiere && !sons.gouttiere) { sons.gouttiere = true; audio.jouer('gouttiere'); }
     if (b.enLAir && surSol && sons.vyPrec < -1 && v.y > -0.5) audio.jouer('rebond');
     sons.vyPrec = v.y;
   } else if (sons.roulement) { audio.arreterRoulement(); sons.roulement = false; }
+  // Chocs synchronisés sur les contacts réels (au plus 6 par image pour ne pas saturer)
+  const chocs = phys.prendreChocs();
+  let joues = 0;
+  for (const c of chocs) {
+    if (joues >= 6) break;
+    audio.jouer('choc-' + c.type, { vitesse: c.force });
+    joues++;
+  }
 }
 
 // ---------- Salle ----------
@@ -677,6 +697,7 @@ const titre = new Titre($('titre'), {
 });
 const profilsUI = new ProfilsUI($('profils'), { profils, fermer: () => profilsUI.afficher(false), apresModification: () => { cacheTextures.clear(); banc.redessinerProfils(); } });
 
+function majPanneauAccueil() { if (scene) scene.majPanneau(String(lire('nomJeu') || 'Bowling') + ' · bienvenue'); }
 function allerAuTitre() {
   if (match.etat === 'enCours') { if (!confirm('Abandonner la partie en cours ?')) return; effacerPartie(); }
   bot.arreter();
@@ -688,6 +709,7 @@ function allerAuTitre() {
   lierMatch(new Match({ nbFrames: Number(lire('nbFrames')) || 10, gouttieresFermees: !!lire('gouttieresFermees') }));
   partie.reinitialiser();
   if (cameras) cameras.definir('titre', contexteCamera(), true);
+  majPanneauAccueil();
   titre.afficher(true);
   envoyerEtatATous();
 }

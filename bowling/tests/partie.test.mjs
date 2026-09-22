@@ -90,6 +90,23 @@ console.log('Saut de phase');
   jouerJusquaPreparation();
 }
 
+console.log('Ralenti');
+{
+  partie.ralenti = (res) => res.strike || res.spare;
+  const phasesR = [];
+  const ecoute = (e) => phasesR.push(e.detail.phase);
+  partie.addEventListener('phase', ecoute);
+  partie.reglerVisee(0.06 / 0.399, 0);
+  partie.lancer({ puissance: 0.6, effet: 0, phase: 'normal' });
+  const t = jouerJusquaPreparation();
+  partie.removeEventListener('phase', ecoute);
+  const dernier = resultats[resultats.length - 1];
+  if (dernier.strike) verifier('strike : phase ralenti jouée entre résultat et remise', phasesR.join('>').includes('resultat>ralenti>remise'), phasesR.join('>'));
+  else verifier('pas strike : pas de ralenti', !phasesR.includes('ralenti'), phasesR.join('>'));
+  verifier('le cycle avec ralenti reste borné (< 20 s)', t < 20, t.toFixed(1));
+  partie.ralenti = null;
+}
+
 console.log('Visée');
 {
   partie.reglerVisee(0, 0);
