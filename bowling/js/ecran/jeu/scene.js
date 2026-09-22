@@ -217,7 +217,7 @@ export class Scene3D {
     panneau.position.set(0, 0.95 + hauteurMasque / 2, -(D.longueurPiste + D.longueurDeck) - 0.35);
     this.scene.add(panneau);
     this.enseigne = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.05), new THREE.MeshStandardMaterial({ map: textureTexte(nom), emissive: '#ffffff', emissiveMap: textureTexte(nom, { fond: '#000000', couleur: '#ffffff' }), emissiveIntensity: 0.9, roughness: 0.5 }));
-    this.enseigne.position.set(0, 1.75, -(D.longueurPiste + D.longueurDeck) - 0.14);
+    this.enseigne.position.set(0, 2.05, -(D.longueurPiste + D.longueurDeck) - 0.14);
     this.scene.add(this.enseigne);
     const liseret = new THREE.Mesh(new THREE.BoxGeometry(largeurSalle - 1, 0.06, 0.44), new THREE.MeshStandardMaterial({ color: '#f2c94c', emissive: '#f2c94c', emissiveIntensity: 0.6, roughness: 0.5 }));
     liseret.position.set(0, 0.95, -(D.longueurPiste + D.longueurDeck) - 0.35);
@@ -251,6 +251,7 @@ export class Scene3D {
       const grp = new THREE.Group();
       grp.position.x = k * PAS_PISTES;
       const principale = k === 0;
+      if (!principale) (this.groupesVoisins || (this.groupesVoisins = [])).push(grp);
 
       const piste = new THREE.Mesh(new THREE.PlaneGeometry(D.largeurPiste, longueurPiste), matBois);
       piste.rotation.x = -Math.PI / 2;
@@ -285,6 +286,7 @@ export class Scene3D {
         const kick = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.35, longueurKick), matKickback);
         kick.position.set(s * (D.largeurPiste / 2 + D.largeurGouttiere + 0.03), 0.175, -(D.longueurPiste - 0.3) - longueurKick / 2);
         grp.add(kick);
+        if (principale) (this.kickbacksPrincipaux || (this.kickbacksPrincipaux = [])).push(kick);
       }
 
       // Retour de boules (entre deux pistes), avec deux boules décoratives
@@ -312,13 +314,7 @@ export class Scene3D {
     }
     this.geoQuille = geoQuille;
     this.matQuille = matQuilleDecor;
-    // Deck élargi (entraînement Lancers puissants)
-    if (D.largeurDeckExtra > 0) {
-      const large = new THREE.Mesh(new THREE.BoxGeometry(D.largeurDeckExtra * 2, 0.1, D.longueurDeck + 0.5), new THREE.MeshStandardMaterial({ color: '#8a6a4a', roughness: 0.6 }));
-      large.position.set(0, -0.049, -(D.longueurPiste - 0.3) - (D.longueurDeck + 0.5) / 2 + 0.5);
-      large.receiveShadow = true;
-      this.scene.add(large);
-    }
+    this.mapBois = mapBois;
   }
 
   _quilles() {
@@ -438,6 +434,73 @@ export class Scene3D {
     this.camera.updateProjectionMatrix();
   }
 
+  // 100 quilles : largeur du deck de bois sous le rack ; les pistes voisines s'effacent quand il les recouvre,
+  // les parois du deck s'écartent, et le panneau du fond suit.
+  // Évasement (mode 100 quilles) : trapèze de bois sur les 3 derniers mètres, deck de la largeur du rack,
+  // parois ; les pistes voisines et les parois de la piste normale sont masquées. demi = null → piste normale.
+  majEvasement(demi) {
+    if (this.evasement) { this.scene.remove(this.evasement); this.evasement.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this.evasement = null; }
+    const D = DIM, L = D.longueurPiste, zK = -(L - 0.3), demiPiste = D.largeurPiste / 2;
+    const actif = !!demi && demi > demiPiste + 0.01;
+    for (const g of this.groupesVoisins || []) g.visible = !actif;
+    for (const k of this.kickbacksPrincipaux || []) k.visible = !actif;
+    if (this.spotDeck) this.spotDeck.angle = actif ? Math.min(Math.PI / 3, Math.PI / 7 * (demi / 0.7)) : Math.PI / 7;
+    if (!actif) return;
+    const grp = new THREE.Group();
+    const matBois = new THREE.MeshStandardMaterial({ map: this.mapBois, roughness: 0.3, metalness: 0.02 });
+    const zDebut = -(L - 3.0);
+    // Trapèze de l'évasement (dessiné dans le plan XY puis couché sur la piste : y du dessin = −z du monde)
+    const forme = new THREE.Shape();
+    forme.moveTo(-demiPiste, -zDebut); forme.lineTo(demiPiste, -zDebut); forme.lineTo(demi, -zK); forme.lineTo(-demi, -zK); forme.closePath();
+    const trapeze = new THREE.Mesh(new THREE.ShapeGeometry(forme), matBois);
+    trapeze.rotation.x = -Math.PI / 2;
+    trapeze.position.y = 0.003;
+    trapeze.receiveShadow = true;
+    grp.add(trapeze);
+    const longueurDeck = D.longueurDeck + 0.3;
+    const deck = new THREE.Mesh(new THREE.PlaneGeometry(demi * 2, longueurDeck), matBois);
+    deck.rotation.x = -Math.PI / 2;
+    deck.position.set(0, 0.003, zK - longueurDeck / 2);
+    deck.receiveShadow = true;
+    grp.add(deck);
+    const matParoi = new THREE.MeshStandardMaterial({ color: '#21242e', roughness: 0.7, metalness: 0.1 });
+    for (const s of [-1, 1]) {
+      const paroi = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.4, longueurDeck), matParoi);
+      paroi.position.set(s * (demi + 0.05), 0.2, zK - longueurDeck / 2);
+      grp.add(paroi);
+      // Bordure de l'évasement (liseré clair le long du trapèze)
+      const dx = demi - demiPiste, dz = zK - zDebut;
+      const longueurBord = Math.hypot(dx, dz);
+      const bord = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, longueurBord), new THREE.MeshStandardMaterial({ color: '#b08a5a', roughness: 0.7 }));
+      bord.position.set(s * (demiPiste + demi) / 2, 0.015, (zDebut + zK) / 2);
+      bord.rotation.y = s * Math.atan2(dx, -dz);
+      grp.add(bord);
+    }
+    this.scene.add(grp);
+    this.evasement = grp;
+  }
+
+  // Obstacles (mode Obstacles) : murs rouges à bandes blanches, liste de { x0, x1, z }.
+  majObstacles(liste) {
+    if (this.obstacles) { this.scene.remove(this.obstacles); this.obstacles.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this.obstacles = null; }
+    if (!liste || !liste.length) return;
+    const grp = new THREE.Group();
+    const matRouge = new THREE.MeshStandardMaterial({ color: '#e0453a', roughness: 0.5, emissive: '#5a0f0a', emissiveIntensity: 0.4 });
+    const matBlanc = new THREE.MeshStandardMaterial({ color: '#f4f4f4', roughness: 0.5 });
+    for (const o of liste) {
+      const largeur = o.x1 - o.x0;
+      const mur = new THREE.Mesh(new THREE.BoxGeometry(largeur, 0.3, 0.1), matRouge);
+      mur.position.set((o.x0 + o.x1) / 2, 0.15, o.z);
+      mur.castShadow = true;
+      grp.add(mur);
+      const bande = new THREE.Mesh(new THREE.BoxGeometry(largeur + 0.002, 0.05, 0.102), matBlanc);
+      bande.position.set((o.x0 + o.x1) / 2, 0.22, o.z);
+      grp.add(bande);
+    }
+    this.scene.add(grp);
+    this.obstacles = grp;
+  }
+
   // Trace fantôme du dernier lancer : points {x, z} → pointillés discrets dans la couleur du lanceur.
   majTrace(points, couleurHex) {
     if (this.trace) { this.scene.remove(this.trace); this.trace.traverse((o) => { if (o.geometry && o !== this.trace) o.geometry.dispose(); }); this.trace = null; }
@@ -457,18 +520,6 @@ export class Scene3D {
   }
 
   afficherTrace(visible) { if (this.trace) this.trace.visible = visible; }
-
-  // Barrière d'entraînement (mur bas sur la piste) ; config = { jusquA, z } ou null.
-  majBarriere(config) {
-    if (this.barriere) { this.scene.remove(this.barriere); this.barriere = null; }
-    if (!config) return;
-    const x0 = -DIM.largeurPiste / 2 - 0.05, x1 = config.jusquA;
-    const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.3, 0.1), new THREE.MeshStandardMaterial({ color: '#e0453a', roughness: 0.6 }));
-    m.position.set((x0 + x1) / 2, 0.15, config.z);
-    m.castShadow = true;
-    this.scene.add(m);
-    this.barriere = m;
-  }
 
   // Texture depuis une image (dataURL) — visage photo des profils.
   textureImage(dataUrl) {
@@ -532,8 +583,8 @@ export class Scene3D {
       this.textureLed = new THREE.CanvasTexture(this.canvasLed);
       this.textureLed.colorSpace = THREE.SRGBColorSpace;
       const mat = new THREE.MeshStandardMaterial({ map: this.textureLed, emissive: '#ffffff', emissiveMap: this.textureLed, emissiveIntensity: 1.1, roughness: 0.4 });
-      this.panneauLed = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 0.66), mat);
-      this.panneauLed.position.set(0, 1.08, -(DIM.longueurPiste + DIM.longueurDeck) - 0.14);
+      this.panneauLed = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 0.42), mat);
+      this.panneauLed.position.set(0, 1.22, -(DIM.longueurPiste + DIM.longueurDeck) - 0.14);
       this.scene.add(this.panneauLed);
     }
     this.ledEtat = { texte: String(texte || ''), couleur, clignote, phase: 0 };

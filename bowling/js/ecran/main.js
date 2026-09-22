@@ -22,7 +22,7 @@ import { sauverPartie, chargerPartie, effacerPartie, resumerSauvegarde } from '.
 import { Salon } from './salon.js';
 import { Fin } from './fin.js';
 import { AudioJeu } from './jeu/audio.js';
-import { Entrainement, MODES, enregistrerScore, meilleursScores } from './jeu/entrainement.js';
+import { Entrainement, MODES, enregistrerScore, meilleursScores, modeDepuis, RANGS_MAX_CENT } from './jeu/entrainement.js';
 import { configurerDimensions } from './jeu/physique.js';
 import { Titre } from './titre.js';
 import { ProfilsUI, niveau, estPro } from './profils-ui.js';
@@ -121,10 +121,11 @@ function envoyerEtatATous(message = '') { for (const j of salle.liste) if (j.con
 
 // ---------- Jeu : physique, cycle, HUD, clavier ----------
 
-// Mode : partie (défaut) ou entraînement (index.html?mode=spares|puissance|effet)
-const MODE = (() => { const m = new URL(location.href).searchParams.get('mode'); return m && MODES[m] ? m : 'partie'; })();
-if (MODE === 'puissance') configurerDimensions({ longueurDeck: 3.6, largeurDeckExtra: 2.1 });
-const RANGS = MODE === 'puissance' ? 13 : 4;
+// Mode : partie (défaut) ou entraînement (index.html?mode=spares|cent|obstacle ; anciens noms puissance|effet acceptés)
+const MODE = (() => { const m = new URL(location.href).searchParams.get('mode'); return (m && modeDepuis(m)) || 'partie'; })();
+// 100 quilles : deck plus long pour 14 rangées (13 × 26 cm = 3,4 m) ; la largeur suit chaque rack (évasement)
+if (MODE === 'cent') configurerDimensions({ longueurDeck: 3.9 });
+const RANGS = MODE === 'cent' ? RANGS_MAX_CENT : 4;
 const phys = new MondePhysique(lire, { rangs: RANGS });
 const partie = new Partie(phys, lire);
 let entrainement = null;
@@ -162,7 +163,7 @@ async function demarrerRendu() {
     scene.scene.add(spectateurs.groupe);
     redimensionner();
     cameras.definir(MODE === 'partie' ? 'titre' : 'preparation', contexteCamera(), true);
-    if (MODE === 'partie') majPanneauAccueil(); else scene.majPanneau(MODES[MODE].titre);
+    if (MODE === 'partie') majPanneauAccueil();
   } catch (e) {
     scene = null; cameras = null; renderer = null;
     $('sans-webgl').classList.remove('cache');
@@ -267,7 +268,7 @@ partie.addEventListener('preparation', (e) => {
   hud.majEtat({ phase: 'preparation', boule: e.detail.boule, frame: e.detail.frame, debout: e.detail.debout, lanceur: '', joueur: jc ? jc.nom : (entrainement ? entrainement.titre : '') });
   if (entrainement) {
     if (entrainement.termine) terminerEntrainement();
-    else { if (scene) scene.majBarriere(phys.barriere ? phys.barriere.config : null); hud.majEntrainement(entrainement.etat()); envoyerEtatATous(); }
+    else { entrainement.appliquerPiste(); majVisuelsEntrainement(); hud.majEntrainement(entrainement.etat()); envoyerEtatATous(); }
     return;
   }
   if (match.etat === 'termine') { terminerPartie(); return; }
@@ -286,7 +287,7 @@ function demarrerEntrainement() {
   entrainement.preparer();
   partie.debout = phys.etatQuilles().nbDebout;
   hud.majEtat({ debout: partie.debout, joueur: entrainement.titre, boule: 1, frame: 1 });
-  if (scene) scene.majBarriere(phys.barriere ? phys.barriere.config : null);
+  majVisuelsEntrainement();
   hud.majEntrainement(entrainement.etat());
   hud.majTour({ titre: entrainement.titre, sous: MODES[MODE].description });
   setTimeout(() => hud.majTour({}), 4000);
@@ -1181,7 +1182,17 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
     document.body.append(b);
   });
 }
-demarrerRendu().then(() => requestAnimationFrame(boucle));
+demarrerRendu().then(() => { majVisuelsEntrainement(); requestAnimationFrame(boucle); });
+
+// Les visuels d'un entraînement (barrière, largeur du deck, panneau) dépendent de la scène, qui se charge après
+// le démarrage : on les (re)pose ici, puis à chaque préparation.
+function majVisuelsEntrainement() {
+  if (!scene || !entrainement) return;
+  const e = entrainement.etat();
+  scene.majEvasement(phys.demiEvasement);
+  scene.majObstacles(phys.obstaclesConfig);
+  scene.majPanneau(entrainement.titre + ' · lancer ' + e.lancer + '/' + e.total + (e.niveau ? ' · ' + e.niveau : ''));
+}
 const codeSauve = localStorage.getItem('bowling.salle');
 salle.ouvrir(codeValide(codeSauve) ? codeSauve : nouveauCode());
 window.addEventListener('beforeunload', () => salle.fermer());

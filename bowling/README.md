@@ -9,13 +9,14 @@ Jeu de bowling façon Wii Sports : la partie se joue sur l'écran du PC, les iPh
 - **Jeu 3D** : salle, cinq pistes, enseigne au nom du bowling, boule aux couleurs du joueur, quilles, physique réglée (poche → strike la plupart du temps, splits possibles), gouttières, bumpers, pinsetter, caméras (préparation, poursuite, coupe d'impact, résultat, remise), tout sautable.
 - **Personnages originaux** (assemblés en primitives, aucun asset Nintendo) : couleur du joueur, coiffure, teint, visage photo optionnel ; balancier quand le pouce est posé, lancer, joie, déception ; spectateurs qui acclament, s'exclament ou rient.
 - **Partie** : salon, 1 à 8 joueurs (4 téléphones maximum, téléphone partagé, clavier, bots à 3 niveaux), tours, règles ten-pin, scoreboard, annonces, confettis, fin de partie avec classement, XP et niveaux, sauvegarde et reprise.
-- **Entraînements** : Spares (10 configurations), Lancers puissants (rack de 10 à 91 quilles), Contrôle de l'effet (barrières) ; records enregistrés.
+- **Entraînements** : Spares (10 configurations), 100 quilles (rack de 10 à 105 quilles, piste qui s'évase), Obstacles (dix niveaux) ; records enregistrés.
 - **Sons** synthétisés (roulement, impacts, gouttière, rebond, pinsetter, foule, jingles, musique originale) remplaçables par des fichiers dans `sons/` ; volumes séparés.
 - **Réglages** (Échap) : 9 groupes, ~90 réglages, export/import JSON ; **banc de calibrage** (C) du lot 1 toujours là.
 - **PWA** : écran et manette installables ; pages et bibliothèques en cache (la mise en relation reste en ligne).
 
 ## 1 bis. Journal des versions
 
+- **V1.13** : deux corrections sur les entraînements, et renommage. **« Lancers puissants » devient « 100 quilles »** : la piste s'évase désormais à chaque lancer — sur les 3 derniers mètres, un trapèze de bois l'élargit jusqu'à la largeur du rack (de 1,05 m pour 10 quilles à 4,40 m pour 105), deck et parois suivent, les pistes voisines disparaissent dans ce mode ; avant, un deck fixe de 4,2 m était invisible et chevauchait les pistes voisines. **« Contrôle de l'effet » devient « Obstacles »** : la barrière du tour 1 n'était pas dessinée (l'entraînement démarrait avant la fin du chargement de la scène 3D) ; corrigé, et le mode propose maintenant **dix niveaux** différents (mur central, barrières, poteaux, portes, chicane, quinconce…). Un test vérifie chaque rack (quilles sur le deck, stabilité) et chaque niveau (obstacles posés, aucun passage plus étroit que 28 cm, au moins un lancer qui passe). Les anciens liens `?mode=puissance` et `?mode=effet` et les records continuent de fonctionner.
 - **V1.12** (évolutions, lot B) : **sons synchronisés sur les contacts réels** du moteur physique — chaque choc boule/quille, quille/quille, quille/deck, quille/paroi et boule/paroi produit son claquement à l'instant et à la force mesurés (six nouveaux noms de fichiers `sons/choc-*.ogg` pour les remplacer) ; **ralenti de l'action de quilles** sur strike et spare, rejoué depuis un enregistrement à 60 Hz de la physique, caméra basse de côté (Caméras → « Ralenti » : strike/spare, chaque lancer, jamais ; durée et vitesse) ; **panneau LED** sous l'enseigne (joueur, frame, boule ; annonce clignotante au résultat) ; règle du bowling appliquée : une quille inclinée appuyée contre une paroi du deck est comptée tombée ; seuil de chute 35°.
 - **V1.11** (évolutions, lot A) : la **visée revient au centre** à chaque nouveau tour (réglage Règles → « Recentrer la visée ») ; tirets de visée fins, de largeur constante, partant de la boule ; **trace fantôme du dernier lancer** affichée pendant la préparation, dans la couleur du lanceur (Règles → « Afficher la trace ») ; **zoom de la caméra de préparation** — molette de la souris, touches + / −, boutons − / + de la manette — et **vue du dessus** (touche T ou bouton « vue » de la manette) ; recul et hauteur dans Caméras ; **bandeau « Nouvelle version prête — Recharger »** quand une mise à jour est arrivée (fin du « recharge deux fois »).
 - **V1.10** : ligne de visée lisible — tirets larges avec liseré sombre (ils grossissent avec la distance pour compenser la perspective) jusqu'au deck, et une **cible** posée à la hauteur de la quille 1 là où la boule arriverait en ligne droite ; réglage Affichage → « Ligne de visée » (complète / courte / aucune).
@@ -68,7 +69,7 @@ Quand l'écran est lui-même en ligne (`…/jeux/bowling/`), l'adresse se rempli
 ## 4. Jouer
 
 ### Le titre
-Ouvre l'écran : le titre survole la salle. **Nouvelle partie** ouvre le salon ; **Entraînement** propose Spares, Lancers puissants et Contrôle de l'effet (avec le record de chacun) ; **Profils** gère l'apparence et les statistiques ; **Réglages** et **Calibrage** ouvrent les tiroirs. Touche **M** pour revenir au titre (en partie, il demande confirmation avant d'abandonner). Le premier clic ou la première touche débloque le son.
+Ouvre l'écran : le titre survole la salle. **Nouvelle partie** ouvre le salon ; **Entraînement** propose Spares, 100 quilles et Obstacles (avec le record de chacun) ; **Profils** gère l'apparence et les statistiques ; **Réglages** et **Calibrage** ouvrent les tiroirs. Touche **M** pour revenir au titre (en partie, il demande confirmation avant d'abandonner). Le premier clic ou la première touche débloque le son.
 
 ### Le salon
 Nouvelle partie : le salon s'affiche sur la scène 3D, avec le code de salle et le QR. Chaque téléphone qui rejoint apparaît comme joueur (nom et couleur du téléphone). Ajoute si besoin un joueur clavier, un bot, ou un deuxième joueur sur un téléphone (« + Joueur sur le téléphone de … » : il jouera avec ce téléphone, on se le passe). Renomme, change les couleurs, ordonne avec ▲ ▼, choisis 10 ou 5 frames, puis **Commencer** — ou, sur le premier téléphone, un toucher sur **COMMENCER ▶**.
@@ -109,9 +110,9 @@ Préparation → roulement (caméra de poursuite) → **coupe** sur une caméra 
 ### Entraînements
 Chacun se joue au clavier ou avec n'importe quel téléphone connecté, 10 lancers, puis un écran de fin avec le détail et le record.
 - **Spares** : 7-10, 4-6-7-10, 3-10, 2-4-5-8, 6-7, 2-7, 4-5, 3-6-9-10, 5-7, 6-10 ; score = spares réussis.
-- **Lancers puissants** : une boule par rack, le rack passe de 10 à 91 quilles (13 rangées) sur un deck élargi ; score = quilles tombées cumulées.
-- **Contrôle de l'effet** : une barrière rouge bloque le centre-gauche de la piste, de plus en plus loin vers la droite ; il faut partir à droite et crocheter vers la gauche (effet négatif) ; score = quilles tombées.
-Les entraînements s'ouvrent par `index.html?mode=spares|puissance|effet` (c'est ce que font les boutons du titre).
+- **100 quilles** : une boule par rack, le rack passe de 10 à 105 quilles (4 à 14 rangées) ; à chaque lancer, la piste s'évase sur ses 3 derniers mètres jusqu'à la largeur du rack (1,05 m → 4,40 m), les pistes voisines s'effacent ; score = quilles tombées cumulées.
+- **Obstacles** : dix niveaux de murs rouges à contourner — mur central, barrière à gauche, à droite, deux poteaux, porte étroite, porte décalée, chicane, quinconce, grand mur à gauche, porte et poteau ; certains exigent un angle ou un crochet ; score = quilles tombées. Chaque niveau est vérifié franchissable par les tests.
+Les entraînements s'ouvrent par `index.html?mode=spares|cent|obstacle` (c'est ce que font les boutons du titre) ; les anciens liens `?mode=puissance` et `?mode=effet` restent valables.
 
 ### Profils, statistiques, expérience
 Un profil est créé pour chaque téléphone (par son jeton) et pour chaque joueur clavier ou partagé (par son nom) à la fin d'une partie. Dans **Profils** : coiffure, teint, **photo du visage** (choisis une image, elle est découpée en disque de 128 px et posée sur la tête du personnage), statistiques (parties, moyenne, meilleur, strikes, spares), XP et niveau. À 1 000 XP le joueur devient **Pro** : boule métallisée et lumineuse.
@@ -285,7 +286,7 @@ Chaque test affiche ses lignes ✓/✗ et se termine par « Tous les tests … p
 - [lot 3] Le clavier ne lance que pour un joueur « clavier », sauf option `clavierPourTous` ou touche K sur une manette déconnectée.
 - [lot 3] Le salon accepte jusqu'à 8 joueurs (4 téléphones maximum, le reste en partagé, clavier ou bots).
 - [lot 4] Personnages et spectateurs en primitives Three.js ; sons synthétisés avec remplacement par fichier ; musique = séquenceur Web Audio (la mineur, 104 BPM).
-- [lot 5] Entraînements par paramètre d'URL `?mode=` (le monde physique est construit avec 91 quilles et un deck élargi pour Lancers puissants) ; profils locaux clés `nom:<nom>` ; XP = score + 10/strike + 5/spare ; Pro à 1 000 XP.
+- [lot 5] Entraînements par paramètre d'URL `?mode=` (le monde physique est construit avec 105 quilles et un deck long de 3,9 m pour 100 quilles ; la largeur suit chaque rack) ; profils locaux clés `nom:<nom>` ; XP = score + 10/strike + 5/spare ; Pro à 1 000 XP.
 - [lot 5] PWA : service worker « réseau d'abord, cache en secours » (cache `bowling-v1` à renommer dans `sw.js` pour forcer une mise à jour).
 
 ## 10. Structure

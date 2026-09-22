@@ -16,7 +16,7 @@
 - Partie de 1 à 4 joueurs, 10 frames (option 5), règles officielles du ten-pin, 10e frame complète.
 - Un téléphone par joueur **ou** un seul téléphone qu'on se passe **ou** joueur au clavier/souris ; mélange possible.
 - Joueur ordinateur (bot) à 3 niveaux, pour le solo et les tests.
-- Trois entraînements : Spares (configurations de quilles restantes), Lancers puissants (rack qui grossit à chaque frame : 10, 15, 21, 28, 36, 45, 55, 66, 78, 91 quilles), Contrôle de l'effet (barrières sur la piste imposant une courbe).
+- Trois entraînements : Spares (configurations de quilles restantes), Lancers puissants (rack qui grossit à chaque frame : 10, 15, 21, 28, 36, 45, 55, 66, 78, 91 quilles), Contrôle de l'effet (barrières sur la piste imposant une courbe). [V1.13] Renommés **100 quilles** (10 → 105 quilles, piste qui s'évase à chaque lancer) et **Obstacles** (dix niveaux).
 - Personnages originaux paramétrables (couleur, coiffure, teint, main), option visage à partir d'une photo (découpe en cercle dans le navigateur, rien n'est envoyé nulle part).
 - Spectateurs animés, réactions, callouts, sons, musique d'ambiance originale.
 - Profils, statistiques, niveau d'expérience (titre « Pro » à 1000 points → boule spéciale).
@@ -166,8 +166,8 @@ Three.js (rendu 3D), cannon-es (physique), PeerJS (WebRTC), qrcode (génération
 ### 4.8 Modes
 - **Partie** : 1–4 joueurs, 10 ou 5 frames, options gouttières fermées / gags (lob, arrière).
 - **Spares** : 10 lancers sur des configurations tirées d'une liste (7-10, 4-6-7-10, 3-10, 2-4-5-8, 6-7, etc.) ; score = spares réussis ; meilleur score enregistré.
-- **Lancers puissants** : 10 frames, une boule par frame, rack qui grossit (10 → 91 quilles) ; score = quilles tombées cumulées.
-- **Contrôle de l'effet** : 10 lancers, barrières placées pour imposer une courbe croissante ; score = quilles tombées.
+- **Lancers puissants** : 10 frames, une boule par frame, rack qui grossit (10 → 91 quilles) ; score = quilles tombées cumulées. [V1.13] Devenu **100 quilles** : 10 → 105 quilles, la piste s'évase sur ses 3 derniers mètres jusqu'à la largeur du rack.
+- **Contrôle de l'effet** : 10 lancers, barrières placées pour imposer une courbe croissante ; score = quilles tombées. [V1.13] Devenu **Obstacles** : dix niveaux de murs (mur central, barrières, poteaux, portes, chicane, quinconce…), chacun vérifié franchissable.
 - **Bot** : 3 niveaux (Débutant, Confirmé, Pro) — position, angle, puissance et effet choisis avec un bruit décroissant ; joue avec les mêmes animations et durées (sautables). [lot 3] Livré : rack complet → poche (+6 cm) ; sinon centre du groupe de quilles debout le plus fourni (un 7-10 le force à choisir un côté) ; le Pro joue avec un effet 0,3 compensé au départ. Déroulé visible : réflexion (`delaiBot` 1,2 s) → visée (0,8 s) → armement (0,7 s) → lancer, sautable d'une touche ou d'un toucher.
 
 ### 4.9 Sons et musique

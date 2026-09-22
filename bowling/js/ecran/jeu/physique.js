@@ -21,7 +21,6 @@ export const DIM = {
   espacementQuilles: 0.3048,
   distanceActivation: 3.0,
   hauteurBumper: 0.12,
-  largeurDeckExtra: 0,        // > 0 : deck élargi (demi-largeur) sous les quilles, pour les racks de 91 quilles
 };
 
 // Modifie les dimensions avant la construction du monde et de la scène (entraînement « Lancers puissants » : deck plus long).
@@ -180,13 +179,15 @@ export class MondePhysique {
     // sur lesquels les quilles rebondissent (comme dans un vrai bowling).
     const xm = demiPiste + D.largeurGouttiere + 0.03;
     const zK = -(L - 0.3);
-    const xk = D.largeurDeckExtra > 0 ? D.largeurDeckExtra + 0.05 : xm;
+    this.kickbacks = [];
     for (const s of [-1, 1]) {
       this._boiteStatique(0.03, 0.25, (0.2 - zK) / 2, s * xm, 0.0, (0.2 + zK) / 2);
-      this._boiteStatique(0.03, 0.5, (deck + fosse + 0.3) / 2, s * xk, 0.25, zK - (deck + fosse + 0.3) / 2, this.matKickback);
+      this.kickbacks.push(this._boiteStatique(0.03, 0.5, (deck + fosse + 0.3) / 2, s * xm, 0.25, zK - (deck + fosse + 0.3) / 2, this.matKickback));
     }
-    // Deck élargi (entraînement Lancers puissants) : les quilles des grands racks débordent de la piste
-    if (D.largeurDeckExtra > 0) this._boiteStatique(D.largeurDeckExtra, 0.05, (deck + 0.5) / 2, 0, -0.05, zK - (deck + 0.5) / 2 + 0.5);
+    this.corpsEvasement = [];
+    this.demiEvasement = null;
+    this.corpsObstacles = [];
+    this.obstaclesConfig = [];
     // Fosse : plancher (sous le deck aussi, pour ce qui tombe à côté) et fond
     const longueurFosseTotale = fosse + deck + 0.3;
     this._boiteStatique(largeurTotale / 2, 0.05, longueurFosseTotale / 2, 0, -D.profondeurFosse - 0.05, zK0 - longueurFosseTotale / 2);
@@ -359,14 +360,40 @@ export class MondePhysique {
     for (const q of this.quilles) if (!garder.has(q.numero)) { q.presente = false; q.debout = false; }
   }
 
-  // Barrière d'entraînement (Contrôle de l'effet) : mur bas du bord gauche jusqu'à x = jusquA, à z = -longueurPiste × fraction ; null = aucune.
-  reglerBarriere(config) {
-    if (this.barriere) { this.world.removeBody(this.barriere); this.barriere = null; }
-    if (!config) return;
-    const x0 = -DIM.largeurPiste / 2 - 0.05, x1 = config.jusquA;
-    const z = -DIM.longueurPiste * (config.fraction || 0.55);
-    this.barriere = this._boiteStatique((x1 - x0) / 2, 0.15, 0.05, (x0 + x1) / 2, 0.1, z, this.matKickback);
-    this.barriere.config = { ...config, z };
+  // Évasement (mode 100 quilles) : sur les 3 derniers mètres, la piste s'élargit en 8 marches jusqu'à la
+  // demi-largeur `demi`, puis un deck de cette largeur porte le rack, bordé de parois. null = piste normale.
+  reglerEvasement(demi) {
+    for (const b of this.corpsEvasement) this.world.removeBody(b);
+    this.corpsEvasement = [];
+    const D = DIM, L = D.longueurPiste, zK = -(L - 0.3), demiPiste = D.largeurPiste / 2;
+    if (!demi || demi <= demiPiste + 0.01) {
+      for (const k of this.kickbacks) if (!k.world) this.world.addBody(k);
+      this.demiEvasement = null;
+      return;
+    }
+    for (const k of this.kickbacks) if (k.world) this.world.removeBody(k);
+    const zDebut = -(L - 3.0), n = 8;
+    for (let i = 0; i < n; i++) {
+      const z0 = zDebut + (zK - zDebut) * i / n, z1 = zDebut + (zK - zDebut) * (i + 1) / n;
+      const hx = demiPiste + (demi - demiPiste) * ((i + 1) / n);
+      this.corpsEvasement.push(this._boiteStatique(hx, 0.05, Math.abs(z1 - z0) / 2 + 0.001, 0, -0.05, (z0 + z1) / 2));
+    }
+    const longueurDeck = D.longueurDeck + 0.3;
+    this.corpsEvasement.push(this._boiteStatique(demi, 0.05, longueurDeck / 2, 0, -0.05, zK - longueurDeck / 2));
+    for (const s of [-1, 1]) this.corpsEvasement.push(this._boiteStatique(0.03, 0.4, longueurDeck / 2, s * (demi + 0.05), 0.35, zK - longueurDeck / 2, this.matKickback));
+    this.demiEvasement = demi;
+  }
+
+  // Obstacles (mode Obstacles) : liste de { x0, x1, f } — murs bas entre x0 et x1, à la fraction f de la piste.
+  reglerObstacles(liste) {
+    for (const b of this.corpsObstacles) this.world.removeBody(b);
+    this.corpsObstacles = [];
+    this.obstaclesConfig = [];
+    for (const o of liste || []) {
+      const z = -DIM.longueurPiste * o.f;
+      this.corpsObstacles.push(this._boiteStatique((o.x1 - o.x0) / 2, 0.15, 0.05, (o.x0 + o.x1) / 2, 0.1, z, this.matKickback));
+      this.obstaclesConfig.push({ ...o, z });
+    }
   }
 
   quillesStables() {

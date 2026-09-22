@@ -1,6 +1,6 @@
 // Service worker : met en cache les pages et les bibliothèques pour ouvrir le jeu et la manette sans réseau
 // (la mise en relation PeerJS reste dépendante d'Internet). Changer VERSION_CACHE force la mise à jour.
-const VERSION_CACHE = 'bowling-v1-12';
+const VERSION_CACHE = 'bowling-v1-13';
 const FICHIERS = [
   './', './index.html', './manette.html', './css/ecran.css', './css/manette.css',
   './manifest.webmanifest', './manette.webmanifest',

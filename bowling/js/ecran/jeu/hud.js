@@ -72,7 +72,7 @@ export class Hud {
     if (!e) { this.entrainement.classList.add('cache'); return; }
     this.entrainement.classList.remove('cache');
     this.entrainement.innerHTML = '<div>' + e.titre + ' — lancer <b>' + e.lancer + '</b> / ' + e.total + ' · score <b>' + e.score + '</b></div>' +
-      '<div class="rack">' + (e.rack && e.rack.length ? (e.rack.length <= 10 ? 'quilles ' + e.rack.join('-') : e.rack.length + ' quilles') : '') + (e.barriere ? ' · barrière jusqu’à ' + Math.round(e.barriere.jusquA * 100) + ' cm' : '') + '</div>';
+      '<div class="rack">' + (e.rack && e.rack.length ? (e.rack.length <= 10 ? 'quilles ' + e.rack.join('-') : e.rack.length + ' quilles') : '') + (e.niveau ? ' · niveau ' + e.lancer + ' : ' + e.niveau : '') + '</div>';
   }
 
   // Bandeau central bas : « À toi, Valentin », « Passe le téléphone à Mallaury », « Bot Pro joue… »…
