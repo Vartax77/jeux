@@ -130,7 +130,7 @@ export class Game {
     this.env = new THREE.Group(); this.env.userData.theme = level.theme; this.scene.add(this.env); this.envMeshes = [];
     const A = this.assets, t = level.theme;
     const sky = { docks: 0x0e1620, street: 0x141018, hangar: 0x0a0b0d }[t];
-    this.scene.background = new THREE.Color(sky); this.scene.fog = new THREE.Fog(sky, t === 'hangar' ? 20 : 28, t === 'hangar' ? 70 : 95);
+    this.scene.background = new THREE.Color(sky); this.scene.fog = new THREE.Fog(sky, t === 'hangar' ? 20 : 30, t === 'hangar' ? 70 : (A.backdrops[t] ? 230 : 110));
     this.hemi.color.setHex({ docks: 0x9cc0e8, street: 0xc9a0d8, hangar: 0x8a9ab0 }[t]); this.hemi.intensity = t === 'hangar' ? 0.7 : 1.1;
     this.sun.color.setHex({ docks: 0xffd8a8, street: 0xffc890, hangar: 0xe8f0ff }[t]); this.sun.intensity = t === 'hangar' ? 1.4 : 2.6;
     // Fond panoramique lointain (texture si fournie, sinon ligne d'horizon peinte)
@@ -139,10 +139,15 @@ export class Game {
       // Le cylindre fait 754 m de tour pour 60 m de haut (12,6:1) : on répète l'image autant de fois qu'il faut pour garder ses proportions
       const img = back.image, aspect = img && img.width ? img.width / img.height : 4;
       const map = back.clone(); map.needsUpdate = true; map.repeat.set(Math.max(1, Math.round(12.6 / aspect)), 1);
-      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(120, 120, 60, 48, 1, true), new THREE.MeshBasicMaterial({ map, side: THREE.BackSide, fog: false })); cyl.position.set(7, 18, -30); this.env.add(cyl);
+      // Rayon 320 m, hauteur 200 m : l'horizon de l'image (≈ 47 % de sa hauteur) est calé à la hauteur des yeux (1,6 m)
+      const R = 320, Hc = 200, horizonFrac = 0.47;
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(R, R, Hc, 64, 1, true), new THREE.MeshBasicMaterial({ map, side: THREE.BackSide, fog: false, toneMapped: false }));
+      cyl.position.set(7, 1.6 + (horizonFrac - 0.5) * Hc, -30); this.env.add(cyl);
+      // Rideau de brume entre le décor et le fond : le loin se fond dans le panorama
+      map.repeat.set(Math.max(1, Math.round((2 * Math.PI * R / Hc) / aspect)), 1);
     }
     else this._paintedSkyline(t);
-    const groundMat = A.material(t === 'hangar' ? 'concrete' : t === 'street' ? 'asphalt' : 'ground', { docks: 0x2b3038, street: 0x24262b, hangar: 0x3a3c40 }[t], [40, 40]);
+    const groundMat = A.scaled(t === 'hangar' ? 'concrete' : t === 'street' ? 'asphalt' : 'ground', { docks: 0x2b3038, street: 0x24262b, hangar: 0x3a3c40 }[t], 300, 300, 300, 2.5);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), groundMat); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; this.env.add(ground); this.envMeshes.push(ground);
     if (t === 'docks') this._themeDocks(); else if (t === 'street') this._themeStreet(); else this._themeHangar();
     // Couverts du joueur, caisses et plates-formes des ennemis, lampadaire par zone de combat
@@ -151,20 +156,33 @@ export class Game {
       { const all = pt.waves.flatMap(w => w.enemies.map(e => e.pos)); if (all.length) {
           const cx = all.reduce((a, e) => a + e[0], 0) / all.length, cz = all.reduce((a, e) => a + e[2], 0) / all.length;
           const side = dir.x > 0.3 ? -1 : 1, lx = cx + side * 3.5, lz = cz + 1.5;
-          if (t !== 'hangar') { const mat = A.material('metal', 0x555a66); this._box(0.18, 5.5, 0.18, mat, lx, 2.75, lz, { shadow: false }); this._box(1.2, 0.12, 0.3, mat, lx - side * 0.5, 5.5, lz, { shadow: false }); const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe8b0 })); bulb.position.set(lx - side * 1.0, 5.4, lz); this.env.add(bulb); }
+          if (t !== 'hangar') { if (!this._propOrBox('lampadaire', 0.18, 5.5, 0.18, 'metal', 0x555a66, lx, lz, null, side > 0 ? Math.PI : 0).isGroup) { const mat = A.material('metal', 0x555a66); this._box(1.2, 0.12, 0.3, mat, lx - side * 0.5, 5.5, lz, { shadow: false }); const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe8b0 })); bulb.position.set(lx - side * 1.0, 5.4, lz); this.env.add(bulb); } }
           const pl = new THREE.PointLight(0xffe0a0, t === 'hangar' ? 60 : 90, 26, 1.6); pl.position.set(lx - side * 1.0, t === 'hangar' ? 6.5 : 5.3, lz); this.env.add(pl);
       } }
       const c = p.clone().add(dir.clone().multiplyScalar(pt.cover === 'car' ? 2.6 : 1.9));
       if (pt.cover === 'car') this._car(c.x, c.z, Math.atan2(dir.x, dir.z) + Math.PI / 2, 0x8a2a2a, true);
-      else this._box(2.2, 1.15, 0.9, A.material('metal', 0x8a6a3a, [2, 1]), c.x, 0.575, c.z).lookAt(p.x, 0.575, p.z);
+      else this._propOrBox('caisse', 2.2, 1.15, 0.9, 'wood', 0x9a7a4a, c.x, c.z, p);
       for (const w of pt.waves) for (const e of w.enemies) {
         const ep = new THREE.Vector3(...e.pos), toCam = p.clone().sub(ep).setY(0).normalize();
         if (ep.y > 0.1) {
-          this._box(2.2, 0.3, 2.2, A.material('metal', 0x50555e, [2, 2]), ep.x, ep.y - 0.15, ep.z);
-          const rail = this._box(2.2, 0.5, 0.08, A.material('metal', 0x50555e, [2, 1]), ep.x, ep.y + 0.25, ep.z, { env: false }); rail.position.add(toCam.clone().multiplyScalar(1.05)); rail.lookAt(p.x, ep.y + 0.25, p.z);
-        } else { const cp = ep.clone().add(toCam.multiplyScalar(0.9)); this._box(1.3, 1.0, 0.7, A.material('metal', 0x5a5f6a, [1, 1]), cp.x, 0.5, cp.z).lookAt(p.x, 0.5, p.z); }
+          this._box(2.2, 0.3, 2.2, A.scaled('metal', 0x50555e, 2.2, 0.3, 2.2), ep.x, ep.y - 0.15, ep.z);
+          const rail = this._box(2.2, 0.5, 0.08, A.scaled('metal', 0x50555e, 2.2, 0.5, 0.08), ep.x, ep.y + 0.25, ep.z, { env: false }); rail.position.add(toCam.clone().multiplyScalar(1.05)); rail.lookAt(p.x, ep.y + 0.25, p.z);
+        } else { const cp = ep.clone().add(toCam.multiplyScalar(0.9)); this._propOrBox(['caisse', 'baril', 'palette'][(Math.abs(ep.x * 7 + ep.z) | 0) % 3], 1.3, 1.0, 0.7, 'wood', 0x8a6f48, cp.x, cp.z, p); }
       }
     }
+  }
+  // Pose un objet 3D chargé (assets/props/<name>.glb) ; à défaut une boîte de la bonne matière, à l'échelle
+  _propOrBox(name, w, h, d, tex, color, x, z, lookAtPos = null, rotY = null) {
+    const A = this.assets, obj = A.prop(name);
+    if (obj) {
+      const g = new THREE.Group(); g.add(obj); g.position.set(x, 0, z);
+      if (lookAtPos) g.lookAt(lookAtPos.x, 0, lookAtPos.z); if (rotY !== null) g.rotation.y = rotY;
+      this.env.add(g); obj.traverse(o => { if (o.isMesh) this.envMeshes.push(o); });
+      return g;
+    }
+    const m = this._box(w, h, d, A.scaled(tex, color, w, h, d), x, h / 2, z);
+    if (lookAtPos) m.lookAt(lookAtPos.x, h / 2, lookAtPos.z); if (rotY !== null) m.rotation.y = rotY;
+    return m;
   }
   _paintedSkyline(t) {
     if (t === 'hangar') return;
@@ -185,9 +203,16 @@ export class Game {
   }
   _themeDocks() {
     const A = this.assets, cont = [0xb5482a, 0x2a6fb5, 0x3d8a3d, 0xb5a02a, 0x7a2ab5];
-    for (let i = 0; i < 16; i++) { const x = i % 2 ? rnd(24, 34) : rnd(-18, -7), z = -rnd(4, 75); this._box(2.4, 2.5, 6, A.material('container', cont[i % cont.length], [1, 2]), x, 1.25, z); }
-    for (let i = 0; i < 4; i++) this._box(2.4, 2.5, 6, A.material('container', cont[i], [1, 2]), rnd(-4, 22), 1.25, -rnd(62, 78));
-    for (let i = 0; i < 5; i++) { const x = i % 2 ? rnd(27, 36) : rnd(-18, -10), z = -rnd(5, 70), m = A.material('metal', 0x6b6f77); this._box(0.5, 12, 0.5, m, x - 2.5, 6, z, { shadow: false }); this._box(0.5, 12, 0.5, m, x + 2.5, 6, z, { shadow: false }); this._box(6, 0.4, 0.4, m, x, 11, z, { shadow: false }); }
+    const container = (x, z, i, rotY = 0) => { const g = this._propOrBox('conteneur', 2.4, 2.6, 6.1, 'container', cont[i % cont.length], x, z, null, rotY); return g; };
+    for (let i = 0; i < 16; i++) { const x = i % 2 ? rnd(24, 34) : rnd(-18, -7), z = -rnd(4, 75); container(x, z, i); }
+    for (let i = 0; i < 4; i++) container(rnd(-4, 22), -rnd(62, 78), i);
+    // Plan intermédiaire : piles de conteneurs et grues en silhouette, entre le décor jouable et le panorama
+    const dark = new THREE.MeshStandardMaterial({ color: 0x1c2229, roughness: 1 });
+    for (let i = 0; i < 22; i++) { const x = rnd(-90, 100), z = -rnd(40, 95), levels = 1 + (Math.random() * 3 | 0); if (Math.abs(x - 8) < 30 && z > -60) continue; for (let l = 0; l < levels; l++) this._box(2.5, 2.6, 6.2, dark, x, 1.3 + l * 2.6, z, { shadow: false, env: false }); }
+    for (let i = 0; i < 4; i++) { const x = rnd(-80, 90), z = -rnd(70, 95); this._box(1.2, 30, 1.2, dark, x - 6, 15, z, { shadow: false, env: false }); this._box(1.2, 30, 1.2, dark, x + 6, 15, z, { shadow: false, env: false }); this._box(28, 1.5, 1.5, dark, x, 30, z, { shadow: false, env: false }); }
+    // Petits objets près des zones de combat
+    for (let i = 0; i < 10; i++) this._propOrBox(i % 2 ? 'palette' : 'baril', i % 2 ? 1.2 : 0.6, i % 2 ? 0.15 : 0.9, i % 2 ? 1.0 : 0.6, i % 2 ? 'wood' : 'metal', i % 2 ? 0x9a7a4a : 0x3a5a8a, rnd(-6, 22), -rnd(4, 60), null, rnd(0, Math.PI));
+    for (let i = 0; i < 5; i++) { const x = i % 2 ? rnd(27, 36) : rnd(-18, -10), z = -rnd(5, 70); if (A.prop('grue')) { this._propOrBox('grue', 6, 22, 6, 'metal', 0x6b6f77, x, z, null, rnd(0, Math.PI)); continue; } const m = A.material('metal', 0x6b6f77); this._box(0.5, 12, 0.5, m, x - 2.5, 6, z, { shadow: false }); this._box(0.5, 12, 0.5, m, x + 2.5, 6, z, { shadow: false }); this._box(6, 0.4, 0.4, m, x, 11, z, { shadow: false }); }
     const water = new THREE.Mesh(new THREE.PlaneGeometry(300, 120), new THREE.MeshStandardMaterial({ color: 0x0b2a3a, roughness: 0.2, metalness: 0.6 })); water.rotation.x = -Math.PI / 2; water.position.set(0, 0.02, -140); this.env.add(water);
     const lineMat = new THREE.MeshStandardMaterial({ color: 0x9a8a3a, roughness: 1 });
     for (let z = 0; z > -80; z -= 8) { const l = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 4), lineMat); l.rotation.x = -Math.PI / 2; l.position.set(-9, 0.01, z - 2); this.env.add(l); }
@@ -196,23 +221,27 @@ export class Game {
     const A = this.assets;
     for (const side of [-1, 1]) {
       for (let z = 4; z > -90; z -= 12) {
-        const h = rnd(9, 14), m = this._box(6, h, 12, A.material('brick', side < 0 ? 0x5a3f36 : 0x4a4a55, [2, 4]), side * 13, h / 2, z - 6);
+        const h = rnd(9, 14), m = this._box(6, h, 12, A.scaled('brick', side < 0 ? 0x5a3f36 : 0x4a4a55, 6, h, 12, 3), side * 13, h / 2, z - 6);
         for (let k = 0; k < 3; k++) for (const y of [2.2, 5.5, 8.5]) { if (y > h - 1) continue; const w = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.6), new THREE.MeshBasicMaterial({ color: Math.random() < 0.5 ? 0xffd27a : 0x22303a })); w.position.set(side * -3.02, y - h / 2, -4.5 + k * 3); w.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2; m.add(w); }
       }
       for (let z = -2; z > -80; z -= 14) this._box(0.25, 5, 0.25, A.material('metal', 0x555a66), side * 9, 2.5, z, { shadow: false });
     }
-    for (let i = 0; i < 7; i++) this._car(i % 2 ? rnd(-8, -5) : rnd(5, 8), -rnd(6, 76), rnd(-0.2, 0.2), [0x2a4a8a, 0x8a8a8a, 0x2a2a2a, 0xc0c0c0, 0x8a2a2a][i % 5]);
+    for (let i = 0; i < 7; i++) { const x = i % 2 ? rnd(-8, -5) : rnd(5, 8), z = -rnd(6, 76); if (A.prop(i % 3 ? 'voiture' : '4x4')) this._propOrBox(i % 3 ? 'voiture' : '4x4', 4.2, 1.4, 1.9, 'metal', 0x555555, x, z, null, rnd(-0.2, 0.2)); else this._car(x, z, rnd(-0.2, 0.2), [0x2a4a8a, 0x8a8a8a, 0x2a2a2a, 0xc0c0c0, 0x8a2a2a][i % 5]); }
+    for (let i = 0; i < 6; i++) this._propOrBox('poubelle', 0.7, 1.2, 0.7, 'metal', 0x2f5a3a, (i % 2 ? -9.2 : 9.2), -rnd(4, 76), null, 0);
+    // Plan intermédiaire : immeubles lointains au bout de la rue
+    const far = new THREE.MeshStandardMaterial({ color: 0x1a1720, roughness: 1 });
+    for (let i = 0; i < 14; i++) { const x = rnd(-60, 60), h = rnd(20, 60); this._box(rnd(10, 18), h, 14, far, x, h / 2, -rnd(100, 150), { shadow: false, env: false }); }
     const lane = new THREE.MeshStandardMaterial({ color: 0xd8d0a0, roughness: 1 });
     for (let z = 0; z > -90; z -= 6) { const l = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 3), lane); l.rotation.x = -Math.PI / 2; l.position.set(0, 0.01, z - 1.5); this.env.add(l); }
   }
   _themeHangar() {
-    const A = this.assets, wall = A.material('concrete', 0x2e3138, [8, 3]), steel = A.material('metal', 0x50555e, [4, 1]);
+    const A = this.assets, wall = A.scaled('concrete', 0x2e3138, 100, 10, 100, 3), steel = A.scaled('metal', 0x50555e, 96, 1, 3, 2);
     this._box(0.5, 10, 100, wall, -14.5, 5, -40); this._box(0.5, 10, 100, wall, 14.5, 5, -40);
     this._box(30, 0.5, 100, wall, 0, 9.5, -40, { shadow: false });
     this._box(30, 10, 0.5, wall, 0, 5, -80);
     for (const side of [-1, 1]) { this._box(3.2, 0.3, 96, steel, side * 11.4, 3.85, -40); this._box(0.08, 1.0, 96, steel, side * 9.85, 4.5, -40, { shadow: false }); for (let z = 0; z > -80; z -= 8) this._box(0.2, 4, 0.2, steel, side * 12.9, 2, z - 2); }
     for (let z = -6; z > -78; z -= 16) for (const side of [-1, 1]) { const l = new THREE.SpotLight(0xfff0d0, 40, 30, 0.6, 0.5, 1.2); l.position.set(side * 8, 9, z); l.target.position.set(side * 3, 0, z - 4); this.env.add(l); this.env.add(l.target); const cone = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.6, 10), new THREE.MeshBasicMaterial({ color: 0xfff0d0 })); cone.position.copy(l.position); this.env.add(cone); }
-    for (let i = 0; i < 8; i++) this._box(1.2, 1.2, 1.2, A.material('metal', 0x6a5a3a), rnd(-8, 8) + (i % 2 ? 6 : -6), 0.6, -rnd(8, 74));
+    for (let i = 0; i < 8; i++) this._propOrBox(['caisse', 'baril', 'palette', 'chariot'][i % 4], 1.2, 1.2, 1.2, 'wood', 0x8a6f48, rnd(-8, 8) + (i % 2 ? 6 : -6), -rnd(8, 74), null, rnd(0, Math.PI));
   }
 
   // ------------------------------------------------------------ Réseau → jeu

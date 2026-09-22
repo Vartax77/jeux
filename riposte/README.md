@@ -70,6 +70,25 @@ Carrées, **répétables** (« seamless / tileable »), JPG 1024×1024 ou 2048×
 | `assets/tex/metal.jpg` | seamless tileable texture, scratched painted steel plate, rivets, flat lighting |
 | `assets/tex/brick.jpg` | seamless tileable texture, old brick wall, weathered, flat lighting |
 
+### Objets 3D — Runway → TRELLIS (dossier `assets/props/`)
+Chaque fichier présent remplace la boîte correspondante dans le décor ; absent, la boîte reste. Le jeu remet le modèle à sa hauteur réelle et le pose au sol, aucune retouche d'échelle à faire. Pas de Mixamo pour les objets : image → TRELLIS → *Download GLB* → renommer → déposer.
+
+| Fichier | Objet | Hauteur réelle | Prompt Runway (format 1:1) |
+|---|---|---|---|
+| `palette.glb` | palette bois | 0,15 m | `single wooden euro pallet, worn, 3/4 view, centered, plain grey background, flat even lighting, no text` |
+| `caisse.glb` | caisse bois | 1,0 m | `single large wooden shipping crate, planks, stencil marks, 3/4 view, centered, plain grey background, flat lighting` |
+| `conteneur.glb` | conteneur 20 pieds | 2,6 m | `single 20ft shipping container, corrugated steel, rust streaks, closed doors, 3/4 view, centered, plain grey background, flat lighting` |
+| `baril.glb` | baril | 0,9 m | `single rusty blue oil drum, 3/4 view, centered, plain grey background, flat lighting` |
+| `chariot.glb` | chariot élévateur | 2,1 m | `single yellow forklift, no driver, 3/4 view, centered, plain grey background, flat lighting` |
+| `voiture.glb` | berline | 1,45 m | `single dark grey sedan car, parked, 3/4 view, centered, plain grey background, flat lighting` |
+| `4x4.glb` | 4×4 | 1,9 m | `single black SUV, 3/4 view, centered, plain grey background, flat lighting` |
+| `lampadaire.glb` | lampadaire | 5,5 m | `single tall industrial street lamp post, single arm, 3/4 view, centered, plain grey background, flat lighting` |
+| `grue.glb` | grue portuaire | 22 m | `single harbor gantry crane, 3/4 view, whole structure visible, centered, plain grey background, flat lighting` |
+| `poubelle.glb` | conteneur à ordures | 1,2 m | `single green metal dumpster, 3/4 view, centered, plain grey background, flat lighting` |
+| `bidon.glb` | bidon | 0,6 m | `single jerry can, olive, 3/4 view, centered, plain grey background, flat lighting` |
+
+Le nom ne se voit pas dans le jeu ; ce qui compte est le fichier au bon nom. Un GLB fait 1 à 20 Mo ; viser *Simplify* 0.95 dans TRELLIS. Ajouter `wood.jpg` (planches) et refaire `container.jpg` (tôle ondulée seule) dans `assets/tex/` améliore les boîtes restantes.
+
 ### Fonds panoramiques — Runway
 Paysage très large, **4096×1024** (rapport 4:1), horizon au milieu, sans texte ; le bord gauche doit raccorder avec le bord droit (demander « seamless horizontal panorama ») :
 | Fichier | Prompt |
