@@ -64,6 +64,16 @@ export class Net {
   }
 
   _accept(conn) {
+    // Même téléphone (même identifiant PeerJS) déjà connu → on remplace sa liaison, il garde sa place et son état
+    const same = this.players.findIndex(p => p && p.conn && p.conn.peer === conn.peer);
+    if (same >= 0) {
+      const p = this.players[same]; try { p.conn.close(); } catch (_) {}
+      p.conn = conn; p.ready = false;
+      conn.on('open', () => { p.ready = true; conn.send({ t: 'hello', n: same + 1 }); this.onEvent('rejoin', p); });
+      conn.on('data', m => this._onData(p, m));
+      conn.on('close', () => { if (this.players[same] === p && p.conn === conn) { this.players[same] = null; this.onEvent('leave', p); } });
+      return;
+    }
     const slot = this.players.findIndex(p => p === null);
     if (slot < 0) { conn.on('open', () => { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 300); }); return; }
     const p = this._newPlayer(slot); p.conn = conn; this.players[slot] = p;

@@ -112,11 +112,14 @@
     });
   }
 
+  let connecting = false;
   function openConn(code) {
-    if (stop) return;
+    if (stop || connecting || (conn && conn.open)) return;
+    connecting = true;
     setStatus('connexion…');
     conn = peer.connect('riposte-' + code, { serialization: 'json', reliable: true });
     conn.on('open', () => {
+      connecting = false;
       $('login').style.display = 'none'; $('pad').style.display = 'flex';
       setStatus(n ? 'Joueur ' + n + ' · connecté' : 'connecté');
       if (!loopStarted) { loopStarted = true; loop(); }
@@ -142,6 +145,7 @@
     conn.on('iceStateChanged', st => { lastReason = 'ICE ' + st; console.log(lastReason); });
     conn.on('error', e => { lastReason = (e.type || '') + ' ' + (e.message || e); console.warn(e); });
     conn.on('close', () => {
+      connecting = false;
       if (stop) return;
       setStatus('déconnecté (' + (lastReason || 'fermé par le PC') + ') — reconnexion…');
       setTimeout(() => { if (peer.disconnected) peer.reconnect(); openConn(code); }, 1500);

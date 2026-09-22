@@ -67,7 +67,7 @@ export class Game {
     addEventListener('keydown', e => {
       const k = e.key.toLowerCase();
       if (k === 'l') $('lobby').classList.toggle('hidden');
-      if (k === 'k') { const p = this.net.addLocalPlayer(); if (p) this.setBanner('Joueur clavier/souris ajouté (J' + (p.slot + 1) + ') — clic = tir, Espace = couvrir', 2.5); }
+      if (k === 'k') { const lp = this.net.players.find(q => q && q.local); if (lp) { this.net.players[lp.slot] = null; this._status(lp, 'retiré', '#333'); this.setBanner('Joueur clavier retiré', 1.5); } else { const p = this.net.addLocalPlayer(); if (p) this.setBanner('Joueur clavier/souris ajouté (J' + (p.slot + 1) + ') — clic = tir, Espace = couvrir · K le retire', 2.5); } }
       if (k === 'm') { this.audio.enabled = !this.audio.enabled; this.music.setEnabled(this.audio.enabled); this.setBanner(this.audio.enabled ? 'Son activé' : 'Son coupé', 1.2); this.saveSettingsNow(); }
       if (k === 'n') { this.music.setEnabled(!this.music.enabled); this.setBanner(this.music.enabled ? 'Musique activée' : 'Musique coupée', 1.2); this.saveSettingsNow(); }
       if (k === 'd' && this.state === 'title') { this.setDifficulty(DIFF_ORDER[(DIFF_ORDER.indexOf(this.difficultyKey) + 1) % 3]); this.setBanner('Difficulté : ' + this.diff.label, 1.2); }
@@ -215,6 +215,7 @@ export class Game {
     if (type === 'error') { const el = $('err'); el.style.display = 'block'; el.textContent = 'Erreur réseau : ' + (data && data.type); return; }
     if (type === 'join') { this._initPlayer(p); this._status(p, 'connecté', COLORS[p.slot]); this._pushState(p, true); return; }
     if (type === 'leave') { this._status(p, 'déconnecté', '#333'); return; }
+    if (type === 'rejoin') { if (!p.g) this._initPlayer(p); this._status(p, 'reconnecté', COLORS[p.slot]); this._pushState(p, true); return; }
     if (type === 'cover') { this.onCover(p, data); return; }
     if (type === 'fire') { this.onFire(p); return; }
     if (type === 'calibrate') { if (!this.inFight && this.state !== 'calib') this.startCalibration(p); return; }
@@ -239,7 +240,7 @@ export class Game {
     if (this.state === 'paused') { this.state = this.pausedFrom; return; }
     if (this.state === 'calib') { this.onCalibFire(p); return; }
     if (this.state === 'lobby') { if (!this.calibDone) this.startCalibration(p); else this.toTitle(); return; }
-    if (this.state === 'title') { if (this.diffHover >= 0) { this.setDifficulty(DIFF_ORDER[this.diffHover]); return; } if (this.menuHover >= 0) this.startLevel(this.menuHover); return; }
+    if (this.state === 'title') { const dh = p.diffHover ?? -1, mh = p.menuHover ?? -1; if (dh >= 0) { this.setDifficulty(DIFF_ORDER[dh]); return; } if (mh >= 0) this.startLevel(mh); return; }
     if (this.state === 'gameover') {
       if (this.continuesLimited && this.continuesLeft <= 0) { this.toTitle(); return; }
       this.continueGame(); return;
@@ -551,12 +552,11 @@ export class Game {
     c.fillStyle = '#9aa4b5'; c.font = '500 18px system-ui'; c.fillText('Visez une zone et TIREZ pour la choisir', W / 2, H * 0.32);
     // Sélecteur de difficulté : trois pastilles, la sélection est mémorisée
     const pw = 150, ph2 = 44, pgap = 16, px0 = W / 2 - (pw * 3 + pgap * 2) / 2, py = H * 0.37;
-    this.diffHover = -1;
+    for (const p of this.players()) { p.diffHover = -1; p.menuHover = -1; }
     DIFF_ORDER.forEach((key, i) => {
       const x = px0 + i * (pw + pgap), y = py, active = key === this.difficultyKey;
       let hover = false;
-      for (const p of this.players()) if (p.x * W > x && p.x * W < x + pw && p.y * H > y && p.y * H < y + ph2) hover = true;
-      if (hover) this.diffHover = i;
+      for (const p of this.players()) if (p.x * W > x && p.x * W < x + pw && p.y * H > y && p.y * H < y + ph2) { hover = true; p.diffHover = i; }
       c.fillStyle = active ? '#ff4d4d' : (hover ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.06)');
       c.strokeStyle = active ? '#ff8a8a' : (hover ? '#fff' : '#3a4250'); c.lineWidth = active ? 3 : 2;
       c.beginPath(); c.roundRect(x, y, pw, ph2, 22); c.fill(); c.stroke();
@@ -564,12 +564,10 @@ export class Game {
       c.fillText(DIFFS[key].label, x + pw / 2, y + ph2 / 2 + 6);
     });
     const cw = Math.min(300, W * 0.26), ch = 150, gap = 28, x0 = W / 2 - (cw * 3 + gap * 2) / 2, y0 = H * 0.46;
-    this.menuHover = -1;
     LEVELS.forEach((L, i) => {
       const x = x0 + i * (cw + gap), y = y0;
       let hover = false;
-      for (const p of this.players()) if (p.x * W > x && p.x * W < x + cw && p.y * H > y && p.y * H < y + ch) hover = true;
-      if (hover) this.menuHover = i;
+      for (const p of this.players()) if (p.x * W > x && p.x * W < x + cw && p.y * H > y && p.y * H < y + ch) { hover = true; p.menuHover = i; }
       c.fillStyle = hover ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.07)'; c.strokeStyle = hover ? '#fff' : '#3a4250'; c.lineWidth = 2;
       c.beginPath(); c.roundRect(x, y, cw, ch, 12); c.fill(); c.stroke();
       const [z, n] = L.name.split(' — ');
