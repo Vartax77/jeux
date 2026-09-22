@@ -1,6 +1,14 @@
 // Sons synthétisés (aucun fichier). pan ∈ [-1, 1] = position horizontale à l'écran de la source.
 export class Audio {
-  constructor() { this.ctx = null; this.master = null; this.noise = null; this.enabled = true; }
+  constructor() { this.ctx = null; this.master = null; this.noise = null; this.enabled = true; this.samples = {}; }
+  // Charge un échantillon optionnel (assets/sfx/<nom>.mp3) ; absent → on garde la synthèse
+  async loadSample(name, url) {
+    try { const r = await fetch(url); if (!r.ok) return; const buf = await r.arrayBuffer(); if (!this.ctx) this.init(); if (!this.ctx) return; this.samples[name] = await this.ctx.decodeAudioData(buf); } catch (_) {}
+  }
+  playSample(name, pan = 0, gain = 1, rate = 1) {
+    const b = this.samples[name]; if (!b || !this.ok()) return false;
+    const src = this.ctx.createBufferSource(); src.buffer = b; src.playbackRate.value = rate; src.connect(this._out(pan, gain)); src.start(); return true;
+  }
 
   init() {
     if (this.ctx) return;
@@ -39,6 +47,7 @@ export class Audio {
   // Tir 9 mm : claquement très bref et brillant, corps sec dans les médiums, coup de poing grave court, queue de réverbération courte
   shot(pan = 0) {
     if (!this.ok()) return;
+    if (this.playSample('shot', pan, 0.9, 0.97 + Math.random() * 0.06)) return;   // fichier fourni : léger décalage de hauteur pour ne pas sonner « copié-collé »
     this._noiseBurst({ pan, gain: 1.0, dur: 0.02, freq: 6500, q: 0.7, type: 'highpass', decay: 0.012 });   // transitoire
     this._noiseBurst({ pan, gain: 0.8, dur: 0.06, freq: 1800, q: 1.2, type: 'bandpass', decay: 0.045 });   // crack
     this._tone({ pan, gain: 0.55, freq: 240, to: 55, dur: 0.07, type: 'sine' });                             // punch

@@ -27,7 +27,9 @@ export class Enemy {
     this.char = makeCharacter(game.assets, this.T.color);
     this.group = this.char.group; this.parts = this.char.parts;
     for (const m of this.parts) m.userData.enemy = this;
-    this.group.position.copy(this.pos); this.group.position.y = this.baseY - 2.1;
+    this.group.position.copy(this.pos); this.elevated = this.baseY > 0.1;
+    this.group.position.y = this.elevated ? this.baseY : this.baseY - 2.1;
+    if (this.elevated) { this.char.kneel(); this.char.kneeling = false; }
     // Halo d'annonce
     this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xff3030, transparent: true, opacity: 0, depthWrite: false }));
     this.glow.scale.set(0.001, 0.001, 1); game.scene.add(this.glow);
@@ -84,7 +86,8 @@ export class Enemy {
     switch (this.state) {
       case 'rise': {
         const k = smooth(clamp(this.clock / 0.55, 0, 1));
-        this.group.position.y = this.baseY - 2.1 + 2.1 * k;
+        if (this.elevated) { if (this.char.legL) { this.char.legL.rotation.x = -1.4 * (1 - k); this.char.legR.rotation.x = -1.2 * (1 - k); this.char.legR.position.z = 0.3 * (1 - k); this.char.torsoG.position.y = this.char.hips.position.y = 0.55 + 0.35 * k; } }
+        else this.group.position.y = this.baseY - 2.1 + 2.1 * k;
         if (k >= 1) { this.hittable = true; if (this.T.run) { this.enter('run'); this.char.play('run'); } else if (this.T.fires === false) this.enter('idle'); else { this.enter('cool'); this.cool = rnd(0.25, 0.7); } }
         break; }
       case 'run': {

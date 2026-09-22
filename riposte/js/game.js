@@ -63,7 +63,7 @@ export class Game {
   // ------------------------------------------------------------ DOM / entrées PC
   _initDom() {
     this.cv2 = $('overlay'); this.ctx2 = this.cv2.getContext('2d');
-    const enableAudio = () => { this.audio.init(); this.audio.resume(); };
+    const enableAudio = () => { this.audio.init(); this.audio.resume(); if (!this._sfxLoaded) { this._sfxLoaded = true; this.audio.loadSample('shot', 'assets/sfx/shot.mp3'); } };
     addEventListener('pointerdown', enableAudio); addEventListener('keydown', enableAudio);
     addEventListener('keydown', e => {
       const k = e.key.toLowerCase();
@@ -174,8 +174,8 @@ export class Game {
             for (const dz of [-0.9, 0.9]) { const br = this._box(1.6, 0.08, 0.08, steel, side * 9.2, ep.y - 0.7, ep.z + dz, { env: false }); br.rotation.z = side * 0.6; }
             for (const dz of [-1, 1]) this._box(2.0, 0.9, 0.06, steel, side * 9.0, ep.y + 0.45, ep.z + dz, { env: false });
             this._box(0.06, 0.9, 2.0, steel, side * 8.0, ep.y + 0.45, ep.z, { env: false });
-          } else if (t !== 'hangar') {
-            // Posé sur un conteneur (2,6 m)
+          } else if (t !== 'hangar' || Math.abs(ep.x) < 8) {
+            // Posé sur un conteneur (2,6 m) — dans le hangar seulement hors des passerelles
             this._propOrBox('conteneur', 2.4, 2.6, 6.1, 'container', CONTAINER_COLORS[(Math.abs(ep.x * 3 + ep.z) | 0) % CONTAINER_COLORS.length], ep.x, ep.z, p);   // axe long vers la caméra : ne masque personne
           }
         } else { const cp = ep.clone().add(toCam.multiplyScalar(0.9)); this._propOrBox(['caisse', 'baril', 'palette'][(Math.abs(ep.x * 7 + ep.z) | 0) % 3], 1.3, 1.0, 0.7, 'wood', 0x8a6f48, cp.x, cp.z, p); }
@@ -552,7 +552,11 @@ export class Game {
   _cullLights() {
     if (!this.env) return;
     const c = this.camBase.pos;
-    for (const o of this.env.children) if (o.isPointLight || o.isSpotLight) o.visible = o.position.distanceTo(c) < 34;
+    for (const o of this.env.children) if (o.isPointLight || o.isSpotLight) {
+      if (o.userData.base === undefined) o.userData.base = o.intensity;
+      const d = o.position.distanceTo(c), k = clamp((46 - d) / 12, 0, 1);   // fondu entre 34 et 46 m, jamais de bascule brutale
+      o.intensity = o.userData.base * k;
+    }
   }
 
   // ------------------------------------------------------------ Particules
