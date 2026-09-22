@@ -52,7 +52,7 @@ export class TankBoss extends BossBase {
     this.panels = [];
     const spots = [[-1.35, 1.1], [1.35, 1.1], [-0.75, 1.85], [0.75, 1.85]];
     spots.forEach(([x, y], i) => { const m = this.add(new THREE.BoxGeometry(0.75, 0.6, 0.16), mat(0x2f3540, { emissive: 0x000000 }), x, y, 2.78, 'weak'); m.userData.idx = i; this.panels.push({ mesh: m, hp: 4, open: false, dead: false }); });
-    this.hpMax = 16; this.hp = 16; this.cycle = 0; this.face();
+    this.hpMax = Math.round(16 * game.diff.bossHpMul); this.hp = this.hpMax; this.cycle = 0; this.face();
     this.group.position.y = -3;
   }
   hit(part, p, pan, mesh) {
@@ -82,7 +82,7 @@ export class TankBoss extends BossBase {
     // Tir : annonce 1,0 s puis rafale de 4
     this.fireTimer += dt;
     const tip = this.barrel.localToWorld(new THREE.Vector3(0, 1.3, 0));
-    const period = 2.3, ann = 1.0;
+    const period = 2.3, ann = 1.0 * g.diff.telegraphMul;
     const ph = this.fireTimer % period;
     this.tele = ph > period - ann ? [{ pos: tip, k: (ph - (period - ann)) / ann }] : [];
     if (this.fireTimer >= period) { this.fireTimer -= period; this.burst = 4; this.burstT = 0; }
@@ -108,7 +108,7 @@ export class HeliBoss extends BossBase {
     this.rotor = new THREE.Group(); this.rotor.position.set(0, 1.3, -0.3); this.group.add(this.rotor);
     for (const a of [0, Math.PI / 2]) { const b = this.add(new THREE.BoxGeometry(9, 0.06, 0.35), dark, 0, 0, 0, 'armor', this.rotor); b.rotation.y = a; b.castShadow = false; }
     this.tail = this.add(new THREE.BoxGeometry(1.6, 0.05, 0.2), dark, 0.2, 0.9, -6.2, 'armor'); this.tail.rotation.z = Math.PI / 2;
-    this.hpMax = 20; this.hp = 20; this.cycleT = 0; this.phase = 'strafe'; this.x0 = def.pos[0]; this.y0 = def.pos[1];
+    this.hpMax = Math.round(20 * game.diff.bossHpMul); this.hp = this.hpMax; this.cycleT = 0; this.phase = 'strafe'; this.x0 = def.pos[0]; this.y0 = def.pos[1];
     this.group.position.y = this.y0 + 14; this.face();
   }
   hit(part, p, pan) {
@@ -135,10 +135,10 @@ export class HeliBoss extends BossBase {
       this.face(); this.group.rotation.z = -Math.cos(this.cycleT * 1.05) * 0.25;
       this.fireTimer += dt;
       const tip = this.group.localToWorld(new THREE.Vector3(0, -0.6, 2.6));
-      const period = 1.8, ann = 0.9, ph = this.fireTimer % period;
+      const period = 1.8, ann = 0.9 * g.diff.telegraphMul, ph = this.fireTimer % period;
       this.tele = ph > period - ann ? [{ pos: tip, k: (ph - (period - ann)) / ann }] : [];
       if (this.fireTimer >= period) { this.fireTimer -= period; this.burst = 2; this.burstT = 0; }
-      if (this.burst > 0) { this.burstT -= dt; if (this.burstT <= 0) { this.shootAt(tip, 'bullet', Math.random() < 0.8); this.burst--; this.burstT = 0.14; } }
+      if (this.burst > 0) { this.burstT -= dt; if (this.burstT <= 0) { this.shootAt(tip, 'bullet', Math.random() < Math.min(1, 0.8 * g.diff.accMul)); this.burst--; this.burstT = 0.14; } }
       if (this.cycleT > 6) { this.phase = 'hover'; this.cycleT = 0; this.tele = []; this.engine.material.emissive.setHex(0xff6a1a); this.engine.material.emissiveIntensity = 1.5; g.audio.lock(this.pan()); this.dropped = false; }
     } else {
       this.group.rotation.z *= 0.9; this.group.position.y = this.y0 - 1.5 + Math.sin(this.cycleT * 3) * 0.15;
@@ -158,7 +158,7 @@ export class ChiefBoss extends BossBase {
     this.shield = this.add(new THREE.BoxGeometry(1.1, 1.5, 0.1), mat(0x3a4a5a, { metalness: 0.7, roughness: 0.3 }), 0, -0.55, 0.25, 'shield', this.char.armL);
     this.shield.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.8, 0.02), mat(0xd62828)));
     this.shield.children[0].position.z = 0.06;
-    this.hpMax = 14; this.hp = 14; this.phase = 'guard'; this.phaseT = 0;
+    this.hpMax = Math.round(14 * game.diff.bossHpMul); this.hp = this.hpMax; this.phase = 'guard'; this.phaseT = 0;
     this.char.armL.rotation.x = 0.35; this.char.armL.rotation.y = -0.3;
     this.group.position.y = -2.5; this.face();
   }
@@ -178,14 +178,14 @@ export class ChiefBoss extends BossBase {
     if (this.phase === 'guard') {
       this.char.armL.rotation.x += (0.35 - this.char.armL.rotation.x) * Math.min(1, dt * 8);
       this.fireTimer += dt;
-      const period = 1.7, ann = 0.75, ph = this.fireTimer % period;
+      const period = 1.7, ann = 0.75 * g.diff.telegraphMul, ph = this.fireTimer % period;
       this.tele = ph > period - ann ? [{ pos: tip, k: (ph - (period - ann)) / ann }] : [];
       if (this.fireTimer >= period) { this.fireTimer -= period; this.shootAt(tip, 'bullet', true); this.char.play('shoot'); setTimeout(() => this.alive && this.char.play('aim'), 250); }
       if (this.phaseT > 4) { this.phase = 'throw'; this.phaseT = 0; this.tele = []; g.audio.lock(this.pan()); }
     } else {
       // Bouclier baissé : tête et torse exposés, annonce longue puis grenade
       this.char.armL.rotation.x += (1.6 - this.char.armL.rotation.x) * Math.min(1, dt * 6);
-      const ann = 1.5;
+      const ann = 1.5 * g.diff.telegraphMul;
       this.tele = [{ pos: tip, k: clamp(this.phaseT / ann, 0, 1) }];
       if (this.phaseT >= ann && !this.thrown) { this.thrown = true; this.shootAt(tip, 'grenade', true); }
       if (this.phaseT > 2.0) { this.phase = 'guard'; this.phaseT = 0; this.thrown = false; this.fireTimer = 0; }

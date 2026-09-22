@@ -72,7 +72,7 @@ export class Enemy {
     const uncovered = alive.filter(p => !p.cover);
     const pool = uncovered.length ? uncovered : alive;
     const target = pool[Math.random() * pool.length | 0];
-    const onTarget = Math.random() < this.T.accuracy;
+    const onTarget = Math.random() < Math.min(1, this.T.accuracy * g.diff.accMul);
     g.audio.enemyShot(this.pan());
     g.bullets.push(new Bullet(g, this.gunTip(), target, onTarget, this.T.projectile || 'bullet', this.headPos()));
     this.glow.material.opacity = 0; this.glow.scale.set(0.001, 0.001, 1);
@@ -96,7 +96,7 @@ export class Enemy {
       case 'cool': {
         this.cool -= dt;
         if (this.cool <= 0) {
-          if (Math.random() < this.T.fireChance) { this.enter('aim'); this.telegraph = g.telegraphTime(this.type); this.char.play('aim'); g.audio.lock(this.pan()); }
+          if (Math.random() < Math.min(1, this.T.fireChance * g.diff.fireMul)) { this.enter('aim'); this.telegraph = g.telegraphTime(this.type); this.char.play('aim'); g.audio.lock(this.pan()); }
           else { this.cool = rnd(...this.T.cooldown); this.char.play('idle'); }
         }
         break; }

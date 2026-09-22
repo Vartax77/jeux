@@ -7,6 +7,7 @@ import { LEVELS } from './levels.js';
 import { Enemy, Bullet, CFG, TYPES, clamp, smooth, rnd } from './entities.js';
 import { makeBoss } from './bosses.js';
 import { loadSettings, saveSettings, saveHighScore, loadHighScores } from './settings.js';
+import { DIFFS, DIFF_ORDER } from './difficulty.js';
 
 const SET = { fovX: 40, moveTime: 2.6, slowmo: 0.3, slowmoDur: 0.7, duckDepth: 0.75 };
 const COLORS = ['#ff4d4d', '#4da6ff'];
@@ -22,6 +23,7 @@ export class Game {
     const saved = loadSettings();
     this.settingsLoaded = !!saved;
     this.continuesLimited = saved ? saved.continuesLimited !== false : true;
+    this.difficultyKey = saved && DIFFS[saved.difficulty] ? saved.difficulty : 'normal'; this.diff = DIFFS[this.difficultyKey];
     this.net = new Net({ fovX: saved ? saved.fovX : SET.fovX, autoCenter: saved ? saved.autoCenter : 'soft', onEvent: (t, p, d) => this.onNet(t, p, d) });
     if (saved) { this.audio.enabled = saved.sound !== false; this.music.enabled = saved.music !== false; }
     this.calibDone = this.settingsLoaded; this.calibPlayer = null; this.calibStep = 0;
@@ -34,7 +36,7 @@ export class Game {
     this.timer = 40; this.lastTickSec = -1; this.streak = 0; this.penalty = 0;
     this.moving = null; this.duck = 0; this.shake = 0; this.boss = null;
     this.banner = { text: '', until: 0, sub: '' }; this.ringHits = [];
-    this.menuHover = -1;
+    this.menuHover = -1; this.diffHover = -1;
     this._initDom(); this._initScene();
     this.env = null; this.buildTheme(this.level);
     this._placeCamera(this.level.points[0]);
@@ -53,8 +55,9 @@ export class Game {
   }
 
   saveSettingsNow() {
-    saveSettings({ fovX: this.net.fovX, autoCenter: this.net.autoCenter, sound: this.audio.enabled, music: this.music.enabled, continuesLimited: this.continuesLimited });
+    saveSettings({ fovX: this.net.fovX, autoCenter: this.net.autoCenter, sound: this.audio.enabled, music: this.music.enabled, continuesLimited: this.continuesLimited, difficulty: this.difficultyKey });
   }
+  setDifficulty(key) { if (!DIFFS[key]) return; this.difficultyKey = key; this.diff = DIFFS[key]; this.audio.lock(0); this.saveSettingsNow(); }
 
   // ------------------------------------------------------------ DOM / entrées PC
   _initDom() {
@@ -67,7 +70,8 @@ export class Game {
       if (k === 'k') { const p = this.net.addLocalPlayer(); if (p) this.setBanner('Joueur clavier/souris ajouté (J' + (p.slot + 1) + ') — clic = tir, Espace = couvrir', 2.5); }
       if (k === 'm') { this.audio.enabled = !this.audio.enabled; this.music.setEnabled(this.audio.enabled); this.setBanner(this.audio.enabled ? 'Son activé' : 'Son coupé', 1.2); this.saveSettingsNow(); }
       if (k === 'n') { this.music.setEnabled(!this.music.enabled); this.setBanner(this.music.enabled ? 'Musique activée' : 'Musique coupée', 1.2); this.saveSettingsNow(); }
-      if (k === 'c') { this.continuesLimited = !this.continuesLimited; this.setBanner('Continues : ' + (this.continuesLimited ? CONTINUES_PER_ZONE + ' par zone' : 'illimités'), 1.5); this.saveSettingsNow(); }
+      if (k === 'd' && this.state === 'title') { this.setDifficulty(DIFF_ORDER[(DIFF_ORDER.indexOf(this.difficultyKey) + 1) % 3]); this.setBanner('Difficulté : ' + this.diff.label, 1.2); }
+      if (k === 'c') { this.continuesLimited = !this.continuesLimited; this.continuesLeft = this.continuesLimited ? this.diff.continues : Infinity; this.setBanner('Continues : ' + (this.continuesLimited ? this.diff.continues + ' par zone' : 'illimités'), 1.5); this.saveSettingsNow(); }
       if (e.key === '+' || e.key === '=') { this.net.fovX = clamp(this.net.fovX + 2, 10, 90); this.saveSettingsNow(); }
       if (e.key === '-') { this.net.fovX = clamp(this.net.fovX - 2, 10, 90); this.saveSettingsNow(); }
       if (k === 'r') { const modes = ['soft', 'hard', 'off']; this.net.autoCenter = modes[(modes.indexOf(this.net.autoCenter) + 1) % 3]; this.setBanner('Recentrage à la sortie de couvert : ' + AUTOC[this.net.autoCenter], 1.5); this.saveSettingsNow(); }
@@ -235,7 +239,7 @@ export class Game {
     if (this.state === 'paused') { this.state = this.pausedFrom; return; }
     if (this.state === 'calib') { this.onCalibFire(p); return; }
     if (this.state === 'lobby') { if (!this.calibDone) this.startCalibration(p); else this.toTitle(); return; }
-    if (this.state === 'title') { if (this.menuHover >= 0) this.startLevel(this.menuHover); return; }
+    if (this.state === 'title') { if (this.diffHover >= 0) { this.setDifficulty(DIFF_ORDER[this.diffHover]); return; } if (this.menuHover >= 0) this.startLevel(this.menuHover); return; }
     if (this.state === 'gameover') {
       if (this.continuesLimited && this.continuesLeft <= 0) { this.toTitle(); return; }
       this.continueGame(); return;
@@ -282,15 +286,18 @@ export class Game {
     this.setLevel(0); this._placeCamera(this.level.points[0]); this.camBase.look.y += 0.4;
   }
   setLevel(i) {
-    this.levelIndex = i; this.level = LEVELS[i];
-    if (!this.env || this.env.userData.theme !== this.level.theme) this.buildTheme(this.level);
+    this.levelIndex = i; const raw = LEVELS[i]; this.level = raw;
+    if (!this.env || this.env.userData.theme !== raw.theme) this.buildTheme(raw);
   }
   startLevel(i) {
     this.clearField(); this.boss = null;
     this.setLevel(i);
+    const d = this.diff, raw = LEVELS[i];
+    this.level = { ...raw, lives: d.lives, ammo: d.ammo, timePerPoint: Math.round(raw.timePerPoint * d.timeMul),
+      points: raw.points.map(pt => pt.boss ? { ...pt, boss: { ...pt.boss, time: Math.round(pt.boss.time * d.timeMul) } } : pt) };
     this.players().forEach(p => { this._initPlayer(p); this._pushState(p, true); });
     this.pointIndex = 0; this.waveIndex = 0; this.streak = 0; this.penalty = 0;
-    this.continuesLeft = CONTINUES_PER_ZONE; this.usedContinueThisZone = false;
+    this.continuesLeft = this.continuesLimited ? d.continues : Infinity; this.usedContinueThisZone = false;
     $('hud').classList.remove('hidden'); $('stats').classList.add('hidden'); $('bossbar').classList.add('hidden');
     this._placeCamera(this.level.points[0]);
     this.state = 'intro'; this.stateClock = 0;
@@ -298,7 +305,8 @@ export class Game {
     this.music.start(this.level.theme); this.music.setIntense(false);
   }
   continueGame() {
-    if (this.continuesLimited) { if (this.continuesLeft <= 0) return; this.continuesLeft--; }
+    if (this.continuesLimited && this.continuesLeft <= 0) return;
+    if (this.continuesLimited) this.continuesLeft--;
     this.usedContinueThisZone = true;
     this.clearField();
     this.players().forEach(p => { p.g.lives = this.level.lives; p.g.ammo = this.level.ammo; p.g.alive = true; this._pushState(p); });
@@ -356,14 +364,14 @@ export class Game {
     this.setBanner('ZONE NETTOYÉE', 3);
     const last = this.levelIndex + 1 >= LEVELS.length;
     const best = {};
-    for (const p of this.players()) best[p.slot] = saveHighScore(this.level.id, { score: p.g.score, date: Date.now() })[0].score;
+    for (const p of this.players()) { p.g.score = Math.round(p.g.score * this.diff.scoreMul); best[p.slot] = saveHighScore(this.level.id + ':' + this.difficultyKey, { score: p.g.score, date: Date.now() })[0].score; }
     this.showStats(this.level.name.replace(/^ZONE \d — /, '') + ' — TERMINÉ', last ? 'Toutes les zones sont libérées. TIRER pour revenir au titre.' : 'TIRER pour passer à la zone suivante', best);
   }
   gameOver() {
     this.state = 'gameover'; this.audio.gameOver(); this.music.stop();
     this.setBanner('GAME OVER', 3);
     const out = this.continuesLimited && this.continuesLeft <= 0;
-    const hint = out ? 'Plus de continue pour cette zone — TIRER pour revenir au menu' : 'TIRER pour continuer (reprise au point actuel)' + (this.continuesLimited ? ` · ${this.continuesLeft} continue(s) restant(s)` : '');
+    const hint = out ? 'Plus de continue pour cette zone — TIRER pour revenir au menu' : 'TIRER pour continuer (reprise au point actuel)' + (this.continuesLimited ? ` · ${this.continuesLeft} continue(s) restant(s) (${this.diff.label})` : '');
     this.showStats('GAME OVER', hint);
   }
   showStats(title, hint, best = null) {
@@ -402,7 +410,10 @@ export class Game {
   // ------------------------------------------------------------ Caméra
   _placeCamera(pt) { this.camBase.pos.set(...pt.pos); this.camBase.look.set(...pt.look); }
   project(v3) { const v = v3.clone().project(this.camera); return { x: (v.x + 1) / 2, y: (1 - v.y) / 2, behind: v.z > 1 }; }
-  telegraphTime(type) { const m = TYPES[type].telegraph || 1; return clamp((CFG.telegraphBase - 0.03 * this.streak + this.penalty) * m, CFG.telegraphMin, CFG.telegraphMax * m); }
+  telegraphTime(type) {
+    const m = TYPES[type].telegraph || 1, dm = this.diff.telegraphMul;
+    return clamp((CFG.telegraphBase - 0.03 * this.streak + this.penalty) * m * dm, CFG.telegraphMin * dm, CFG.telegraphMax * m * dm);
+  }
 
   // ------------------------------------------------------------ Boucle
   render() {
@@ -536,8 +547,22 @@ export class Game {
   }
   drawTitle(c, W, H) {
     c.fillStyle = 'rgba(0,0,0,.45)'; c.fillRect(0, 0, W, H);
-    c.textAlign = 'center'; c.fillStyle = '#fff'; c.font = '900 96px system-ui'; c.fillText('RIPOSTE', W / 2, H * 0.28);
-    c.fillStyle = '#9aa4b5'; c.font = '500 18px system-ui'; c.fillText('Visez une zone et TIREZ pour la choisir', W / 2, H * 0.36);
+    c.textAlign = 'center'; c.fillStyle = '#fff'; c.font = '900 96px system-ui'; c.fillText('RIPOSTE', W / 2, H * 0.24);
+    c.fillStyle = '#9aa4b5'; c.font = '500 18px system-ui'; c.fillText('Visez une zone et TIREZ pour la choisir', W / 2, H * 0.32);
+    // Sélecteur de difficulté : trois pastilles, la sélection est mémorisée
+    const pw = 150, ph2 = 44, pgap = 16, px0 = W / 2 - (pw * 3 + pgap * 2) / 2, py = H * 0.37;
+    this.diffHover = -1;
+    DIFF_ORDER.forEach((key, i) => {
+      const x = px0 + i * (pw + pgap), y = py, active = key === this.difficultyKey;
+      let hover = false;
+      for (const p of this.players()) if (p.x * W > x && p.x * W < x + pw && p.y * H > y && p.y * H < y + ph2) hover = true;
+      if (hover) this.diffHover = i;
+      c.fillStyle = active ? '#ff4d4d' : (hover ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.06)');
+      c.strokeStyle = active ? '#ff8a8a' : (hover ? '#fff' : '#3a4250'); c.lineWidth = active ? 3 : 2;
+      c.beginPath(); c.roundRect(x, y, pw, ph2, 22); c.fill(); c.stroke();
+      c.fillStyle = active ? '#1a0a0a' : '#e8ecf3'; c.font = (active ? '800' : '600') + ' 16px system-ui';
+      c.fillText(DIFFS[key].label, x + pw / 2, y + ph2 / 2 + 6);
+    });
     const cw = Math.min(300, W * 0.26), ch = 150, gap = 28, x0 = W / 2 - (cw * 3 + gap * 2) / 2, y0 = H * 0.46;
     this.menuHover = -1;
     LEVELS.forEach((L, i) => {
@@ -552,7 +577,7 @@ export class Game {
       c.font = '700 26px system-ui'; c.fillText(n, x + cw / 2, y + 82);
       c.fillStyle = '#9aa4b5'; c.font = '400 14px system-ui'; c.fillText({ docks: 'Extérieur · boss : blindé', street: 'Ville · boss : hélicoptère', hangar: 'Intérieur · boss : le colonel' }[L.theme], x + cw / 2, y + 118);
     });
-    c.fillStyle = '#7b8494'; c.font = '400 13px system-ui'; c.fillText('Échap : revenir ici à tout moment · N : musique · M : son', W / 2, H * 0.9);
+    c.fillStyle = '#7b8494'; c.font = '400 13px system-ui'; c.fillText('Échap : revenir ici à tout moment · D : changer de difficulté (clavier) · N : musique · M : son', W / 2, H * 0.9);
   }
   drawCalib(c, W, H) {
     c.fillStyle = 'rgba(0,0,0,.7)'; c.fillRect(0, 0, W, H);
@@ -591,7 +616,7 @@ export class Game {
     }
     const t = $('timer');
     if (this.inFight) { t.textContent = Math.max(0, Math.ceil(this.timer)); t.classList.toggle('urgent', this.timer <= 10); } else t.textContent = this.state === 'wait' ? '—' : '';
-    $('wave').textContent = this.state === 'action' ? `Point ${this.pointIndex + 1}/${this.level.points.length} · vague ${this.waveIndex + 1}` : this.state === 'boss' ? 'BOSS' : '';
+    $('wave').textContent = this.state === 'action' ? `Point ${this.pointIndex + 1}/${this.level.points.length} · vague ${this.waveIndex + 1} · ${this.diff.label}` : this.state === 'boss' ? 'BOSS · ' + this.diff.label : '';
     if (this.boss && this.state === 'boss') $('bossfill').style.width = Math.round(100 * this.boss.hp / this.boss.hpMax) + '%';
   }
 }

@@ -22,7 +22,16 @@ Tout est statique (GitHub Pages, dépôt `jeux`, dossier `riposte/`). Liaison Pe
 - Coop : vies, balles et score par joueur ; la caméra se baisse quand tous les joueurs vivants sont à couvert. Game over : TIRER = continue au point courant.
 
 ## Touches PC
-`+`/`−` sensibilité · `R` recentrage (doux / fort / non) · `K` joueur clavier · `M` son · `N` musique · `C` continues limités (3/zone) ou illimités · `Échap` pause pendant l'action, menu sinon · `L` panneau lobby
+`+`/`−` sensibilité · `R` recentrage (doux / fort / non) · `K` joueur clavier · `M` son · `N` musique · `C` continues limités ou illimités · `D` (au menu) change de difficulté · `Échap` pause pendant l'action, menu sinon · `L` panneau lobby
+
+## Difficulté (Facile / Normal / Difficile)
+Se choisit sur l'écran titre : viser une des trois pastilles et tirer dessus. Mémorisée comme les autres réglages. Elle ajuste, de façon cohérente dans tout le jeu :
+- vies (4 / 3 / 2) et munitions (10 / 8 / 6) ;
+- durée des chronos (+25 % / normal / −15 %) ;
+- précision et fréquence de tir des ennemis, fenêtre d'annonce avant un tir (plus longue en facile) ;
+- points de vie des boss (−25 % / normal / +30 %) ;
+- continues par zone (5 / 3 / 1) ;
+- multiplicateur de score au décompte final (×0,8 / ×1 / ×1,3) — les meilleurs scores sont conservés séparément par zone et par difficulté.
 
 ## Lot 4 — finition
 - **Calibrage guidé** : au tout premier lancement (rien encore enregistré), TIRER dans le lobby lance un calibrage à 2 tirs (repère gauche, repère droit) qui déduit la sensibilité — plus besoin de régler +/− à l'aveugle. Un appui long (0,7 s) sur le bouton « Recentrer » du téléphone relance ce calibrage à tout moment.
